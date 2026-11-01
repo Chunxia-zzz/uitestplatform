@@ -283,7 +283,7 @@ def resolve_diagnostics(global_trace: str, global_video: bool, global_har: bool,
 | V9 | 执行一条**失败**用例（suite 或 case，fixture 页面故错定位符） | 终态 FAILED；stub 收到消息含「失败」、计数、执行 ID、报告链接；artifacts 列表出现 TRACE（on-failure 命中） |
 | V10 | 执行一条**通过**用例（`UIP_TRACE=always`） | artifacts 含 TRACE + VIDEO + HAR；三者均可 200 下载 |
 | V11 | 恢复 `UIP_TRACE=off,UIP_VIDEO=false,UIP_HAR=false` 执行通过用例 | artifacts 无新三类 |
-| V12 | 推送失败不影响执行：stub 挂掉后执行用例 | 执行终态正常落库，日志仅 `notify.failed` |
+| V12 | 推送失败不影响执行：webhook 指向不监听端口后执行一条**失败**用例（`UIP_NOTIFY_ON=failure` 下通过用例不触发推送，用通过用例会空转） | 执行终态正常落库（FAILED），日志仅 `notify.failed` |
 
 > stub 实现：脚本内起一个 `asyncio` 原生 HTTP 小服务（或 uvicorn 单路由），记录请求体供断言——实现细节实现时确认，不引入新依赖。
 

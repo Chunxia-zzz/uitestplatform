@@ -170,7 +170,7 @@ function goElements() {
               <th>元素名</th>
               <th>主定位符</th>
               <th style="width: 56px">稳定</th>
-              <th style="width: 60px"></th>
+              <th style="width: 120px">文本</th>
             </tr>
           </thead>
           <tbody>
@@ -203,7 +203,11 @@ function goElements() {
                 </span>
               </td>
               <td class="muted" style="font-size: 12px">
-                {{ candidate.text ? candidate.text.slice(0, 20) : '—' }}
+                <span :title="candidate.text || ''"
+                      style="display: inline-block; max-width: 110px; overflow: hidden;
+                             text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom">
+                  {{ candidate.text ? candidate.text.slice(0, 40) : '—' }}
+                </span>
               </td>
             </tr>
           </tbody>

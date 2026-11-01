@@ -20,6 +20,7 @@
     python scripts/smoke_m36.py --phase offdiag
 
     # 阶段五（V12）：.env webhook 指向一个**不监听**的端口并重启后端
+    #   （脚本用失败用例触发推送，因为 UIP_NOTIFY_ON 默认 failure）
     python scripts/smoke_m36.py --phase nostub
 
 判定标准见 docs/UI自动化平台M3.6详细设计.md §4.2。
@@ -318,9 +319,11 @@ async def phase_offdiag() -> None:
 async def phase_nostub() -> None:
     async with httpx.AsyncClient(timeout=150) as client:
         project = await new_project(client)
-        case_id = await new_case(client, project["id"], "V12 通过用例", failing=False)
+        # 必须用**失败**用例：notify_on=failure 下通过用例根本不会触发推送，
+        # 用通过用例这条断言就是空转（2026-11-02 验收走查发现并修正）。
+        case_id = await new_case(client, project["id"], "V12 失败用例", failing=True)
         execution = await run_and_poll(client, project["id"], case_id)
-        check("V12 stub 挂掉后执行仍正常终态", execution["status"] == "PASSED",
+        check("V12 推送失败后执行仍正常终态", execution["status"] == "FAILED",
               execution["status"])
         print("  [INFO] 请在服务端日志确认仅出现 event=notify.failed、无未捕获异常")
 

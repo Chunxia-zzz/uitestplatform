@@ -21,9 +21,9 @@
 |---|---|
 | 里程碑 | **M1 / M2 / M3.1 / M3.2 / M3.3 / M3.4 / M3.5 / M3.6 全部完成**（9 份施工图全部落地） |
 | 规模 | 64 API 操作 · 51 条动作字典 · 13 张表 · 50 个错误码 · 8 个前端页 |
-| 质量基线 | `pytest` **206 passed + 1 skipped**（MySQL 集成按 env 门控）；5 份冒烟 **86 项全绿**；`lint-imports` 2 kept；`alembic check` 无差异 |
-| 验收 | 《docs/验收评估报告.md》（2026-10-20）结论"可进入验收"，**用户尚未逐项验收**——新会话很可能被要求配合验收 |
-| 验收前审计 | 已做过一轮，修复 1 个竞态缺陷（诊断产物登记移至终态 commit 前） |
+| 质量基线 | `pytest` **206 passed + 1 skipped**（MySQL 集成按 env 门控）；五份冒烟 **113 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 27）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异 |
+| 验收 | 《docs/验收评估报告.md》结论"可进入验收"；**2026-11-02 已自动复跑全部证据并修 2 处**（/scan 文本列表头与折行、m36 V12 空转）→ 只剩用户手工走查 §5.1 手感项 |
+| 验收前审计 | 已做过两轮：2026-10-20 修 1 个竞态；2026-11-02 修扫描表头 + 修正 V12 验收脚本 |
 
 ## 3. 铁律（违反 = 返工）
 
@@ -46,7 +46,7 @@
 | 迁移一致性 | `../.venv/Scripts/alembic.exe check`（开发库已 stamp，改模型先 `revision --autogenerate`） |
 | 后端启动 | `cd backend && ../.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`（后台运行） |
 | fixture 静态站 | `.venv/Scripts/python.exe scripts/serve_fixtures.py`（8899，含 login/locators/multi-hit/todo） |
-| 前端 dev | `cd frontend && npm run dev -- --host 127.0.0.1 --port 5173` |
+| 前端 dev | `cd frontend && npm run dev -- --host 127.0.0.1 --port 5173 --strictPort`（**必须带 `--strictPort`**：5173 处于 TIME_WAIT 时 vite 会静默换到 5174，导致走查/冒烟打空） |
 | 杀端口 | PowerShell：`Get-NetTCPConnection -LocalPort 8000 -State Listen` → `Stop-Process -Id $_ -Force` |
 | 冒烟验收 | `scripts/smoke_m3.py`(17) · `smoke_m32.py`(24) · `smoke_m34.py`(30) · `smoke_m35.py`(15) · `smoke_m36.py --phase <full\|off\|bad\|offdiag\|nostub>`(27)——m36 各阶段需按脚本头部注释切 env 重启后端 |
 | 演示用例 | `scripts/demo_web_case.py`（11 步 Todo 全链路） |
