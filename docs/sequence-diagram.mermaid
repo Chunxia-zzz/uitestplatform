@@ -1,0 +1,40 @@
+sequenceDiagram
+    autonumber
+    participant API as api/v1/targets.py
+    participant TS as target_service
+    participant DB as AsyncSession
+    participant EXE as execution_service.execute
+    participant AD as PlaywrightAdapter
+    participant NS as notify_service
+    participant WH as 企微 webhook
+
+    Note over API,TS: GAP-42 CRUD（以创建 + 删除为例）
+    API->>TS: create(db, project_id, name, platform, engine_key, ...)
+    TS->>DB: _project_or_404 / registry.validate_route(platform, engine_key)
+    TS->>DB: _assert_name_free（活记录同名 → 409 TARGET_NAME_DUPLICATED）
+    TS->>DB: INSERT execution_target (deleted_seq=0) → commit
+    TS-->>API: ExecutionTarget → 201 TargetOut
+
+    API->>TS: delete(db, target_id)
+    TS->>DB: is_deleted=True, deleted_at=now, deleted_seq=id
+    TS->>DB: UPDATE project SET target_id=NULL WHERE target_id=:id
+    TS-->>API: 204
+
+    Note over EXE,AD: GAP-08 诊断录制（执行器两段式，D37）
+    EXE->>EXE: resolve_diagnostics(settings.trace/video/har, target.options) → plan
+    EXE->>AD: start(SessionConfig(options={trace,video,har}, diagnostics_dir=artifacts/exec-{id}))
+    AD->>AD: tracing.start(screenshots+snapshots+sources) / record_video_dir / record_har_path
+    EXE->>EXE: 终态判定（save = always or (on-failure and FAILED/ERROR)）
+    EXE->>AD: finalize_diagnostics(save_trace=save)
+    AD->>AD: tracing.stop(path=trace.zip) 或 tracing.stop() 丢弃
+    EXE->>AD: manager.close_all()（context close 落盘 video/har）
+    EXE->>EXE: 扫描 diagnostics_dir → 登记 Artifact(kind=TRACE/VIDEO/HAR, step_result_id=NULL)
+    EXE->>DB: INSERT artifact 批量 → commit（FR34 只由执行器落库）
+
+    Note over NS,WH: GAP-20 通知（fire-and-forget，D39）
+    EXE->>NS: notify_execution_result({execution_id, status, suite_name, counts, duration_ms})
+    NS->>NS: should_notify(notify_on, status)?　否→直接返回（不建 task）
+    NS->>NS: asyncio.create_task(_send_safe(...))
+    NS->>WH: httpx POST {msgtype: markdown, markdown: {content}}
+    WH-->>NS: 200 {errcode:0}
+    Note over NS: wait_for(timeout) + 全异常吞掉<br/>失败仅 logger.warning(event="notify.failed")，不影响执行结果

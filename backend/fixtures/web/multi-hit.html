@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Multi Hit</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 32px; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h1>多命中示例</h1>
+  <!-- 同一个 class 命中 3 个元素 → 验证器应返回 matched=3（MULTIPLE，只警告不落 INVALID） -->
+  <ul>
+    <li class="list-item">第一行</li>
+    <li class="list-item">第二行</li>
+    <li class="list-item">第三行</li>
+  </ul>
+
+  <!-- 唯一的那个，用于对照（matched=1 → VALID） -->
+  <button data-testid="only-one">唯一按钮</button>
+</body>
+</html>

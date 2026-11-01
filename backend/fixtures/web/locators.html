@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Locator Matrix</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 32px; }
+    .row { margin-bottom: 18px; }
+    label { display: block; margin-bottom: 4px; color: #475569; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1 id="pageTitle" title="定位类型矩阵">定位类型矩阵</h1>
+
+  <!-- ★ 同一个元素同时具备 11 种可定位特征：一条 HTML 验证 11 种翻译 -->
+  <div class="row">
+    <label>① 全特征按钮（testid / id / class / role / label / placeholder / title / alt / text / css / xpath）</label>
+    <button data-testid="login-submit"
+            id="loginSubmit"
+            class="btn btn-primary"
+            role="button"
+            aria-label="登录按钮"
+            aria-placeholder="点击登录"
+            title="提交登录"
+            alt="登录">登录</button>
+  </div>
+
+  <div class="row">
+    <label for="email">② 表单标签（label 定位）</label>
+    <input id="email" name="email" type="email" placeholder="you@example.com" aria-label="邮箱">
+  </div>
+
+  <div class="row">
+    <label>③ 纯文本（text 定位）</label>
+    <p id="hint">忘记密码请联系管理员</p>
+  </div>
+
+  <div class="row">
+    <label>④ 图片（alt 定位）</label>
+    <img src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
+         alt="用户头像" width="32" height="32">
+  </div>
+
+  <div class="row">
+    <label>⑤ 下拉（select_option 定位）</label>
+    <select id="role" data-testid="role-select">
+      <option value="admin">管理员</option>
+      <option value="tester">测试</option>
+    </select>
+  </div>
+</body>
+</html>

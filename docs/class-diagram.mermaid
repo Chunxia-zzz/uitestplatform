@@ -1,0 +1,107 @@
+classDiagram
+    class DiagnosticsPlan {
+        <<dataclass frozen>>
+        +str trace = "on-failure"
+        +bool video = False
+        +bool har = False
+        +tuple warnings = ()
+    }
+    class resolve_diagnostics {
+        <<pure function domain/diagnostics.py>>
+        +resolve_diagnostics(global_trace: str, global_video: bool, global_har: bool, options: dict) DiagnosticsPlan
+    }
+
+    class Settings {
+        +str notify_wecom_webhook = ""
+        +str notify_on = "failure"
+        +float notify_timeout_s = 5.0
+        +str public_base_url = ""
+        +str trace = "on-failure"
+        +bool video = False
+        +bool har = False
+    }
+
+    class ExecutionTarget {
+        +int id
+        +int project_id
+        +str name
+        +str platform
+        +str engine_key
+        +str|None base_url
+        +dict options
+        +bool enabled
+        +bool is_deleted
+        +datetime|None deleted_at
+        +int deleted_seq
+    }
+
+    class TargetService {
+        <<service target_service.py>>
+        +create(db, project_id, name, platform, engine_key, base_url, options, enabled) ExecutionTarget
+        +get_or_404(db, target_id) ExecutionTarget
+        +update(db, target_id, **fields) ExecutionTarget
+        +delete(db, target_id) None
+        -_assert_name_free(db, project_id, name, exclude_id) None
+    }
+
+    class NotifyService {
+        <<service notify_service.py>>
+        +build_markdown(payload: dict) str
+        +should_notify(notify_on: str, status: str) bool
+        +send_markdown(webhook: str, content: str, timeout_s: float) None
+        +notify_execution_result(payload: dict) None
+    }
+
+    class EngineAdapter {
+        <<abstract>>
+        +start(config: SessionConfig) None
+        +stop() None
+        +finalize_diagnostics(save_trace: bool) None
+        +probe_locator(chain, ctx) LocatorProbe
+        +scan_dom(ctx, max_elements) list
+    }
+
+    class PlaywrightAdapter {
+        +start(config) None
+        +finalize_diagnostics(save_trace: bool) None
+        -tracing.start(screenshots, snapshots, sources)
+        -tracing.stop(path|None)
+    }
+
+    class SessionConfig {
+        <<dataclass frozen>>
+        +str platform
+        +str engine_key
+        +str|None base_url
+        +dict options
+        +bool headless
+        +int timeout_ms
+        +str|None diagnostics_dir = None
+    }
+
+    class ExecutionService {
+        <<service execution_service.py>>
+        +submit(db, project_id, case_ids, target_id, ...) Execution
+        +execute(execution_id: int) None
+        -_record(...) None
+    }
+
+    class Artifact {
+        +int id
+        +int|None execution_id
+        +int|None step_result_id
+        +str kind  "SCREENSHOT|TRACE|VIDEO|HAR"
+        +str path
+        +int|None size_bytes
+    }
+
+    EngineAdapter <|.. PlaywrightAdapter : implements
+    EngineAdapter ..> SessionConfig : start(config)
+    DiagnosticsPlan ..> SessionConfig : 规范键写回 options
+    resolve_diagnostics ..> DiagnosticsPlan : 产出
+    ExecutionService ..> TargetService : targets 过滤 is_deleted
+    ExecutionService ..> NotifyService : 终态后 fire-and-forget
+    ExecutionService ..> resolve_diagnostics : 解析诊断计划
+    ExecutionService ..> Artifact : 扫描目录登记 kind=TRACE/VIDEO/HAR
+    TargetService ..> ExecutionTarget : CRUD + 软删
+    NotifyService ..> Settings : 读 webhook/notify_on/timeout

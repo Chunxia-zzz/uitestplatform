@@ -1,0 +1,36 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# ---- 运行期数据（本地默认 SQLite / 产物）----
+backend/data/
+backend/.env
+backend/artifacts/
+backend/reports/
+backend/events/
+*.db
+*.sqlite3
+
+# ---- 前端 ----
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- 日志 ----
+*.log
+logs/
