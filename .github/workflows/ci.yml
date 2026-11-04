@@ -1,0 +1,149 @@
+name: ci
+
+# 只做校验，不做部署（D40：CI 接入，CD 暂不做）。
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同一分支只保留最新一次校验；纯检查无副作用，可安全取消旧 run。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend · pytest + 分层 + 迁移
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: install deps
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: pytest
+        run: python -m pytest -q
+
+      - name: layering red line (import-linter)
+        run: lint-imports
+
+      # 全新库从 0 跑迁移，再比对 ORM 与迁移是否一致（GAP-33 的 CI 化）。
+      - name: alembic fresh-db check
+        env:
+          UIP_DATABASE_URL: sqlite+aiosqlite:///./data/ci.db
+        run: |
+          mkdir -p data
+          alembic upgrade head
+          alembic check
+
+  frontend:
+    name: frontend · vue-tsc + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: install deps
+        run: npm ci
+
+      - name: typecheck + build
+        run: npm run build
+
+  e2e:
+    name: e2e · 端到端冒烟（API + 浏览器）
+    runs-on: ubuntu-latest
+    needs: backend
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: install deps
+        run: python -m pip install --disable-pip-version-check -r backend/requirements-dev.txt
+
+      # 冒烟会真正开浏览器；只装 chromium，省时间。
+      - name: install chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: seed + start backend & fixtures
+        working-directory: backend
+        run: |
+          mkdir -p data
+          python -m app.cli seed-demo
+          nohup python ../scripts/serve_fixtures.py > /tmp/fixtures.log 2>&1 &
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/backend.log 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8000/healthz >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/healthz
+          curl -fsS http://127.0.0.1:8899/login.html >/dev/null
+
+      - name: smoke m3.1 · 执行内核
+        run: python scripts/smoke_m3.py
+
+      - name: smoke m3.2 · 编排与产物
+        run: python scripts/smoke_m32.py
+
+      - name: smoke m3.4 · 一键接入
+        run: python scripts/smoke_m34.py
+
+      - name: smoke m3.5 · 元素扫描
+        run: python scripts/smoke_m35.py
+
+      - name: collect logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-logs
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            /tmp/backend.log
+            /tmp/fixtures.log
+            backend/artifacts/**
+            backend/reports/**
+            backend/events/**
+
+      - name: stop services
+        if: always()
+        run: |
+          pkill -f "uvicorn app.main:app" || true
+          pkill -f "serve_fixtures.py" || true
