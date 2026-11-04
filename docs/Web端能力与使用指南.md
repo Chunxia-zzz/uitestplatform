@@ -236,6 +236,32 @@ curl http://127.0.0.1:8000/api/v1/executions/1           # 轮询到终态
 - **`FAILED`**：断言不成立（页面行为不符合预期）—— 这是"测出了问题"。
 - **`ERROR`**：引擎层面异常（定位不到、超时、元素不可交互）—— 这是"测试本身有问题或环境有问题"。
 
+### 5.4 执行通知（飞书 / 企微）
+
+执行到终态后可以推一条消息到群里。渠道由环境变量单选，**默认企微**；用飞书就切 `channel`，不需要改代码：
+
+| 环境变量 | 说明 |
+|---|---|
+| `UIP_NOTIFY_CHANNEL` | `wecom`（默认）/ `feishu` |
+| `UIP_NOTIFY_WECOM_WEBHOOK` | 企微群机器人 webhook；留空 = 该渠道禁用 |
+| `UIP_NOTIFY_FEISHU_WEBHOOK` | 飞书自定义机器人 webhook；留空 = 该渠道禁用 |
+| `UIP_NOTIFY_FEISHU_KEYWORD` | 飞书机器人「自定义关键词」，默认 `UI自动化平台`，会写进卡片标题 |
+| `UIP_NOTIFY_ON` | `none` / `failure`（默认，FAILED+ERROR 才推）/ `all` |
+| `UIP_PUBLIC_BASE_URL` | 平台前端地址；非空时卡片带「查看报告」按钮 |
+
+先自测一条（同步返回，失败会直接告诉你原因）：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/notifications:test \
+  -H 'Content-Type: application/json' -d '{}'
+# 200: {"sent":true,"channel":"feishu","webhook":"https://open.feishu.cn/open-apis/bot/v2/hook/9f2c***"}
+```
+
+注意两点：
+
+- 飞书机器人若开了「自定义关键词」，消息标题必须包含关键词，否则飞书返回 `19024 Key Words Not Found`，平台侧表现为 `502 NOTIFY_SEND_FAILED`；
+- 推送是 **fire-and-forget**：超时/网络错误只记日志 `event=notify.failed`，**不会改变执行终态**（D39）。webhook 属凭据，只写 `backend/.env`（已 gitignore），响应与日志均掩码。
+
 ---
 
 ## 6. 排错对照表

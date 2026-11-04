@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -61,9 +62,15 @@ class Settings(BaseSettings):
     #: 全程录制 HAR
     har: bool = False
 
-    # ── M3.6 GAP-20：企业微信通知（D32 / D33 / D39）────────────
-    #: 企微群机器人 webhook 完整 URL；空串 = 全局禁用
+    # ── M3.6 GAP-20 / M3.7 GAP-43：通知（D32 / D33 / D39 / D41）────
+    #: 通知渠道单选：wecom（默认，向后兼容）/ feishu
+    notify_channel: Literal["wecom", "feishu"] = "wecom"
+    #: 企微群机器人 webhook 完整 URL；空串 = 该渠道禁用
     notify_wecom_webhook: str = ""
+    #: 飞书自定义机器人 webhook；空串 = 该渠道禁用
+    notify_feishu_webhook: str = ""
+    #: 飞书机器人「自定义关键词」；非空时必须出现在卡片标题（默认命中用户群机器人）
+    notify_feishu_keyword: str = "UI自动化平台"
     #: 推送门控：none / failure（FAILED+ERROR）/ all；CANCELLED 在 failure 模式不发
     notify_on: str = "failure"
     #: 单次推送超时（秒）

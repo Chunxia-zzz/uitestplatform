@@ -9,6 +9,24 @@ from app.core.db import Base
 from app import models  # noqa: F401  注册全部表
 
 
+@pytest.fixture(autouse=True)
+def isolate_notify_settings(monkeypatch):
+    """测试不得受本地 ``backend/.env`` 影响：通知配置统一回到默认值。
+
+    D41 之后本地开发常把渠道切成 feishu；若不隔离，老测试会走真实飞书 webhook。
+    用例内部的 monkeypatch 在此之后执行，仍可覆盖这些值。
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "notify_channel", "wecom", raising=False)
+    monkeypatch.setattr(settings, "notify_wecom_webhook", "", raising=False)
+    monkeypatch.setattr(settings, "notify_feishu_webhook", "", raising=False)
+    monkeypatch.setattr(settings, "notify_feishu_keyword", "UI自动化平台", raising=False)
+    monkeypatch.setattr(settings, "notify_on", "failure", raising=False)
+    monkeypatch.setattr(settings, "public_base_url", "", raising=False)
+    yield
+
+
 @pytest_asyncio.fixture
 async def db():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")

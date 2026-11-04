@@ -15,13 +15,13 @@
 - 代码仓库：`F:\jerryyang-uitestplatform`（monorepo：docs/ + backend/ + frontend/ + scripts/）。
 - GitHub：https://github.com/Chunxia-zzz/uitestplatform （main 分支，Apache-2.0 LICENSE）。
 
-## 2. 当前状态快照（截至 2026-11-02）
+## 2. 当前状态快照（截至 2026-11-04）
 
 | 维度 | 状态 |
 |---|---|
-| 里程碑 | **M1 / M2 / M3.1 / M3.2 / M3.3 / M3.4 / M3.5 / M3.6 全部完成**（9 份施工图全部落地） |
+| 里程碑 | **M1 / M2 / M3.1 / M3.2 / M3.3 / M3.4 / M3.5 / M3.6 / M3.7 全部完成**（10 份施工图全部落地） |
 | 规模 | 64 API 操作 · 51 条动作字典 · 13 张表 · 50 个错误码 · 8 个前端页 |
-| 质量基线 | `pytest` **206 passed + 1 skipped**（MySQL 集成按 env 门控）；五份冒烟 **113 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 27）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异 |
+| 质量基线 | `pytest` **225 passed + 1 skipped**（MySQL 集成按 env 门控）；五份冒烟 **113 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 27）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异 |
 | CI | **GitHub Actions 三个 job 全绿**（backend / frontend / e2e），红灯与 `needs` 跳过已实测；`.github/workflows/ci.yml` + 本地同源 `scripts/ci_local.sh`；**无 CD**（D40） |
 | 验收 | 《docs/验收评估报告.md》结论"可进入验收"；**2026-11-02 已自动复跑全部证据并修 2 处**（/scan 文本列表头与折行、m36 V12 空转）→ 只剩用户手工走查 §5.1 手感项 |
 | 验收前审计 | 已做过两轮：2026-10-20 修 1 个竞态；2026-11-02 修扫描表头 + 修正 V12 验收脚本 |
@@ -92,6 +92,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
 | D23/Q-08 | 进程内队列，不引入 Redis（触发重评条件见 M3 §0.5） | M3 |
 | D29–D39 | target 软删语义 / 通知门控 / trace 默认 on-failure / 诊断两段式等 | M3.6 §1.3 |
 | **D40** | **接入 GitHub Actions CI（只校验不部署）：backend / frontend / e2e 三 job；D26 的「不做 CI」就此收窄为「不做 CD」** | 2026-11-04 用户要求；`.github/workflows/ci.yml` |
+| **D41** | **通知渠道单选 `UIP_NOTIFY_CHANNEL=wecom\|feishu`（默认 wecom）；飞书走 interactive 卡片，标题带自定义关键词；不做多渠道并行/管理 UI** | 2026-11-04；M3.7 详细设计；GAP-43 |
 
 ## 7. 实现踩坑 Top 10（真金白银的教训，勿重蹈）
 
@@ -114,22 +115,20 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
 |---|---|---|
 | 1 | **生产库选型**：SQLite（现状）vs MySQL 8（D1 原定） | 选 MySQL → 部署时切 `UIP_DATABASE_URL` + 跑 GAP-25；选 SQLite → 改判 GAP-25 不适用 + 更新 D1 |
 | 2 | **「执行目标管理」前端页**要不要排期 | 现状：target/trace/video/har 只能 env 或 API 配置，无页面 |
-| 3 | **GAP-43 飞书通知渠道**实现时机 | 用户将用飞书收通知（当前仅企微单渠道） |
-| 4 | M4（App 端）启动时间 | 用户已定：Web 端验收通过后 |
+| 3 | M4（App 端）启动时间 | 用户已定：Web 端验收通过后 |
 
 ## 9. 下一步开发优先级（依赖序）
 
 ```
-1. GAP-43 飞书通知（渠道抽象 + interactive 卡片 payload + ~5 测试）     ← Web 验收后首批
-2. GAP-09/10/12/13（网络拦截 / 下载 / iframe 按元素 / 执行级变量）      ← 按真实项目需要
-3. D3 工程约定（目录/命名/错误码/Git 流程/测试规范）                    ← 开工 M4 前必须
-4. M4 扩端（Appium/u2 实现，蓝本 D1a 已备好）                          ← 冻结：Web 验收后
-5. GAP-25 MySQL 集成测试（代码已就绪，skip 门控）                      ← 随决策 #1
+1. GAP-09/10/12/13（网络拦截 / 下载 / iframe 按元素 / 执行级变量）      ← 按真实项目需要
+2. D3 工程约定（目录/命名/错误码/Git 流程/测试规范）                    ← 开工 M4 前必须
+3. M4 扩端（Appium/u2 实现，蓝本 D1a 已备好）                          ← 冻结：Web 验收后
+4. GAP-25 MySQL 集成测试（代码已就绪，skip 门控）                      ← 随决策 #1
 ```
 
 ## 10. 已知限制（对用户如实交代过的）
 
-- trace/video/HAR 无页面配置；通知仅企微单渠道、无管理 UI；
+- trace/video/HAR 无页面配置；通知支持企微 / 飞书单选（D41），仍无管理 UI；
 - 无下载处理、网络拦截、trace 之外没有 Shadow DOM 穿透、iframe 只能按 index；
 - 单机单进程语义：重启丢排队任务（启动自愈置 ERROR）、WS 仅同进程（前端有 5s 轮询兜底）；
 - `schema.sql` 是 MySQL DDL，SQLite 下 ENUM 无 DB 级强校验。

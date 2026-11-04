@@ -255,7 +255,7 @@ class TargetNameDuplicated(AppError):
 # ─────────────────────── 通知（M3.6 GAP-20）──────────────────────
 class NotifyNotConfigured(AppError):
     code, http_status, message = ("NOTIFY_NOT_CONFIGURED", 422,
-                                  "未配置企业微信 webhook（UIP_NOTIFY_WECOM_WEBHOOK 为空）")
+                                  "当前通知渠道未配置 webhook（检查 UIP_NOTIFY_CHANNEL 与对应 webhook）")
 
 
 class NotifySendFailed(AppError):

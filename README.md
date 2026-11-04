@@ -8,10 +8,10 @@
 
 **项目定位**：小型测试团队**内部**使用的用例管理与执行平台（非对外 SaaS）。只保留主链：
 **项目管理 → 元素库 → 用例编排 → 按引擎执行 → 生成报告**。
-鉴权、分页、通知、多实例、Docker/CD 等平台管理功能**刻意不做**（见 M3 §0.2.1）；
-**CI 已作为工程门槛接入（D40，只校验不部署）**。
+鉴权、分页、通知管理 UI、多实例、Docker/CD 等平台管理功能**刻意不做**（见 M3 §0.2.1）；
+**CI 已作为工程门槛接入（D40，只校验不部署）**。执行通知支持**企微 / 飞书**两种渠道（D41）。
 
-**当前实现范围**：M1（骨架 + 适配层）+ M2（元素库与多端 Locator）+ M3.1（执行内核）+ M3.3（用例集）+ M3.2（用例编排 / 报告页 / 产物访问）+ M3.4（一键接入）+ M3.5（元素扫描：URL → 候选 → 人工确认落库）+ **M3.6（平台收尾：执行目标 CRUD / 企微通知 / trace·video·HAR）**。
+**当前实现范围**：M1（骨架 + 适配层）+ M2（元素库与多端 Locator）+ M3.1（执行内核）+ M3.3（用例集）+ M3.2（用例编排 / 报告页 / 产物访问）+ M3.4（一键接入）+ M3.5（元素扫描：URL → 候选 → 人工确认落库）+ **M3.6（平台收尾：执行目标 CRUD / 企微通知 / trace·video·HAR）** + **M3.7（飞书通知渠道）**。
 Web 端用 Playwright 真实执行；Appium / uiautomator2 只留**桩适配器**（M4 实现，见 `docs/UI自动化平台移动端对接方案.md`）。
 
 ```
@@ -37,6 +37,7 @@ jerryyang-uitestplatform/
 │  ├─ UI自动化平台M3.4详细设计.md      D2-M3.4 一键接入（URL + 动作 → 全链装配，已实现）
 │  ├─ UI自动化平台M3.5详细设计.md      D2-M3.5 元素扫描（URL → 候选 → 人工确认落库，已实现）
 │  ├─ UI自动化平台M3.6详细设计.md      D2-M3.6 平台收尾（target CRUD / 企微通知 / trace-video-HAR，已实现）
+│  ├─ UI自动化平台M3.7详细设计.md      D2-M3.7 飞书通知渠道（channel 单选 / interactive 卡片 / 关键词，已实现）
 │  ├─ Web端能力与使用指南.md           ★ 能测什么 / 怎么写用例 / 怎么执行（与代码同步）
 │  └─ 待办与缺口跟踪.md               ★ 未完成/待确认事项唯一清单（含核验命令）
 │
@@ -72,7 +73,7 @@ jerryyang-uitestplatform/
 │  │  ├─ schema.sql            13 张表 DDL（MySQL 8，含 M2/M3.3 修正）
 │  │  └─ seed_action_catalog.sql  51 条动作种子（由脚本生成，勿手改）
 │  ├─ fixtures/web/            e2e 静态页面：login / locators / multi-hit
-│  ├─ tests/                   206 个单元测试（target/通知/诊断/扫描/装配/编排…，另 MySQL 集成按需跳过）
+│  ├─ tests/                   225 个单元测试（target/通知/诊断/扫描/装配/编排…，另 MySQL 集成按需跳过）
 │  ├─ requirements.txt · pyproject.toml · .env.example
 │
 ├─ frontend/                   Vue 3 + Vite + TypeScript
@@ -179,7 +180,7 @@ Linux / macOS 把 `scripts\setup.ps1` 换成 `scripts/setup.sh`，python 路径�
 | **一键接入**（URL + 动作 → 建项目/元素/用例/用例集并执行） | ✅ M3.4 |
 | **元素扫描**（URL → 候选 + 稳定性分级 → 人工勾选 → 落库） | ✅ M3.5 |
 | **执行目标 CRUD**（创建/详情/更新/软删；路由校验 + 删除置空引用） | ✅ M3.6 |
-| **企微通知**（终态 webhook 推送；fire-and-forget 不影响执行；掩码防泄漏） | ✅ M3.6 |
+| **企微 / 飞书通知**（渠道单选；飞书 interactive 卡片 + 自定义关键词；fire-and-forget 不影响执行；掩码防泄漏） | ✅ M3.6 / M3.7 |
 | **trace / video / HAR**（trace 默认失败才存；产物落库、报告可下载） | ✅ M3.6 |
 | 元素库前端（三栏、拖拽树、定位符面板、验证闭环） | ✅ |
 | **用例编排**（按 `params_schema` 生成表单、步骤排序、写入期校验） | ✅ M3.2 |
@@ -191,7 +192,7 @@ Linux / macOS 把 `scripts\setup.ps1` 换成 `scripts/setup.sh`，python 路径�
 | **Alembic 迁移**（baseline + `alembic check` 一致性） | ✅ M3.2 |
 | 用例集成员启用开关 / 执行列表按用例集筛选 | ✅ M3.2 |
 | Appium / uiautomator2 | 🟡 桩（M4） |
-| 通知 / 健康度页 / trace / 网络拦截 | ⏸ 暂不做或顺延（见跟踪清单） |
+| 通知管理 UI / 健康度页 / trace 页面配置 / 网络拦截 | ⏸ 暂不做或顺延（见跟踪清单） |
 | 登录鉴权 / 跨项目共享元素 / 定位自愈 | ⬜ 二期 |
 
 ## 4. 已知限制（刻意的，不是遗漏）
