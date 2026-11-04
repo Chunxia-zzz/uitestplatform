@@ -1,12 +1,15 @@
 # UI 自动化平台（jerryyang-uitestplatform）
 
+[![ci](https://github.com/Chunxia-zzz/uitestplatform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Chunxia-zzz/uitestplatform/actions/workflows/ci.yml)
+
 > 🤖 **新的 AI 会话接手本项目？先读 [`docs/HANDOVER.md`](docs/HANDOVER.md)** —— 当前状态、铁律、环境坑（Git 推送必须走 7890 代理）、待决策事项、下一步优先级全在里面。
 
 多引擎 UI 自动化测试平台：以 **项目 → 元素 → 用例** 统一管理测试资产，按 **项目/端类型** 路由到不同执行引擎。
 
 **项目定位**：小型测试团队**内部**使用的用例管理与执行平台（非对外 SaaS）。只保留主链：
 **项目管理 → 元素库 → 用例编排 → 按引擎执行 → 生成报告**。
-鉴权、分页、通知、多实例、CI/Docker 等平台管理功能**刻意不做**（见 M3 §0.2.1）。
+鉴权、分页、通知、多实例、Docker/CD 等平台管理功能**刻意不做**（见 M3 §0.2.1）；
+**CI 已作为工程门槛接入（D40，只校验不部署）**。
 
 **当前实现范围**：M1（骨架 + 适配层）+ M2（元素库与多端 Locator）+ M3.1（执行内核）+ M3.3（用例集）+ M3.2（用例编排 / 报告页 / 产物访问）+ M3.4（一键接入）+ M3.5（元素扫描：URL → 候选 → 人工确认落库）+ **M3.6（平台收尾：执行目标 CRUD / 企微通知 / trace·video·HAR）**。
 Web 端用 Playwright 真实执行；Appium / uiautomator2 只留**桩适配器**（M4 实现，见 `docs/UI自动化平台移动端对接方案.md`）。
@@ -124,6 +127,19 @@ cd ../frontend && npm run dev        # http://localhost:5173
 Linux / macOS 把 `scripts\setup.ps1` 换成 `scripts/setup.sh`，python 路径换成 `.venv/bin/python`。
 
 **零配置**：默认数据库是 SQLite（`backend/data/uitest.db`），不需要装 MySQL。
+
+### CI（只校验，不部署 · D40）
+
+`.github/workflows/ci.yml` 三个 job，push `main` / PR 触发（纯文档改动走 `paths-ignore` 跳过）：
+
+| job | 内容 |
+|---|---|
+| `backend` | `pytest` · `lint-imports` · 全新空库 `alembic upgrade head` + `alembic check` |
+| `frontend` | `npm ci` · `vue-tsc --noEmit` · `vite build`（node 22 + npm 缓存） |
+| `e2e` | seed-demo → 起后端 8000 + fixture 8899 → `smoke_m3/m32/m34/m35`（真 Chromium）；`needs: backend` |
+
+本地跑与 CI 同一组命令：`bash scripts/ci_local.sh`（加 `--with-e2e` 时需 8000/8899 已启动）。
+**没有 CD**：项目尚未部署到线上，不建空转的部署 job。
 
 ### 验证 M2 的核心能力（回退链）
 
