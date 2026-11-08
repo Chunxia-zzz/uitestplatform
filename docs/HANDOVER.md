@@ -45,7 +45,7 @@
 |---|---|
 | venv Python | `F:/jerryyang-uitestplatform/.venv/Scripts/python.exe` |
 | 全量测试 | `cd /f/jerryyang-uitestplatform/backend && ../.venv/Scripts/python.exe -m pytest -q` |
-| 分层红线 | `../.venv/Scripts/lint-imports.exe`（预期 2 kept） |
+| 分层红线 | `../.venv/Scripts/lint-imports.exe`（预期 2 kept；**所有 lint/测试命令必须先 cd backend**——错误 cwd 下 ruff 读不到 pyproject 规则集会假绿，CI 红过一次，见踩坑 #28） |
 | 迁移一致性 | `../.venv/Scripts/alembic.exe check`（开发库已 stamp，改模型先 `revision --autogenerate`） |
 | 后端启动 | `cd backend && ../.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`（后台运行；**必须先 cd backend**——`--app-dir` 不改 cwd，相对路径 SQLite/artifacts 会静默指向错误目录新建空库） |
 | fixture 静态站 | `.venv/Scripts/python.exe scripts/serve_fixtures.py`（8899，含 login/locators/multi-hit/todo） |

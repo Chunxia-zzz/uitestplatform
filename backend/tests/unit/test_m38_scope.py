@@ -67,7 +67,9 @@ def test_switch_to_iframe_is_optional_element_action():
 
 
 def test_switch_to_iframe_with_element_and_index_rejected():
-    with pytest.raises(Exception) as ei:
+    from app.core.errors import ValidationFailed
+
+    with pytest.raises(ValidationFailed) as ei:
         validate_action("switch_to_iframe", True, {"index": 0})
     assert "二选一" in str(ei.value)
 
@@ -79,8 +81,10 @@ def test_switch_to_iframe_with_element_alone_ok():
 
 
 def test_download_file_requires_element():
+    from app.core.errors import ValidationFailed
+
     assert element_requirement("download_file", {}) is True
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationFailed):
         validate_action("download_file", False, {})
 
 
@@ -91,7 +95,9 @@ def test_screenshot_target_element_still_special():
 
 
 def test_mock_route_json_and_body_exclusive():
-    with pytest.raises(Exception) as ei:
+    from app.core.errors import ValidationFailed
+
+    with pytest.raises(ValidationFailed) as ei:
         validate_action("mock_route", False,
                         {"pattern": "**/x", "body": "b", "json": {"a": 1}})
     assert "二选一" in str(ei.value)

@@ -16,13 +16,13 @@ class FakeFirst:
     def __init__(self, handle):
         self._handle = handle
 
-    async def wait_for(self, state=None, timeout=None):
+    async def wait_for(self, state=None, timeout=None):  # noqa: ASYNC109  # Playwright signature parity
         return None
 
     async def element_handle(self):
         return self._handle
 
-    async def click(self, timeout=None):
+    async def click(self, timeout=None):  # noqa: ASYNC109  # Playwright signature parity
         return None
 
 
