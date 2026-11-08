@@ -21,6 +21,10 @@
     NO_PROXY=127.0.0.1,localhost python scripts/demo_android_case.py
 
 预期：5/5 步 PASSED；第 2 步 fallback_index=1（首选 resource_id 故意写错）。
+
+注意：第 1 步是 start_app（热启动）而非 restart_app —— 星财富冷启动会弹「开屏广告」，
+全屏且关闭按钮没有可访问性描述，广告期间控件树只有广告本身，"自选" 必然定位不到。
+跑之前如果手机上有开屏广告，先按返回键关掉。
 重复执行：复用项目/目标/元素/用例/用例集，不重复创建。
 """
 from __future__ import annotations
@@ -54,7 +58,10 @@ ELEMENTS = [
 ]
 
 STEPS = [
-    {"action_key": "restart_app", "params": {}, "remark": "冷启动测试包到主界面"},
+    # 用 start_app（热启动 = activate_app）而不是 restart_app：
+    # 星财富冷启动会弹「开屏广告」（全屏、无可访问性描述的关闭按钮），
+    # 广告期间控件树只剩广告本身，"自选" 定位不到 —— 这是 App 产品行为，不是平台缺陷。
+    {"action_key": "start_app", "params": {}, "remark": "热启动测试包（避开开屏广告）"},
     {"action_key": "click", "element": "自选 Tab", "params": {}},
     {"action_key": "click", "element": "标普500ETF-SPDR 行", "params": {}},
     {"action_key": "assert_visible", "element": "个股详情标题", "params": {}},
@@ -150,10 +157,15 @@ def get_or_create_case(client: httpx.Client, project_id: int) -> dict:
 
 
 def ensure_steps(client: httpx.Client, case_id: int, element_ids: dict[str, int]) -> None:
-    existing = call(client, "GET", f"/cases/{case_id}/steps").json()
-    if existing.get("total", 0) > 0:
-        print(f"   复用已有 {existing['total']} 个步骤（不重复写入）")
+    resp = call(client, "GET", f"/cases/{case_id}/steps").json()
+    existing = resp.get("items", [])
+    if [item["action_key"] for item in existing] == [s["action_key"] for s in STEPS]:
+        print(f"   复用已有 {len(existing)} 个步骤（与 spec 一致）")
         return
+    for item in existing:
+        call(client, "DELETE", f"/cases/{case_id}/steps/{item['id']}").raise_for_status()
+    if existing:
+        print(f"   spec 已变，清空 {len(existing)} 个旧步骤后重写")
     for index, step in enumerate(STEPS, start=1):
         body = {"seq": index, "action_key": step["action_key"], "params": step["params"]}
         if step.get("element"):

@@ -11,8 +11,8 @@
 鉴权、分页、通知管理 UI、多实例、Docker/CD 等平台管理功能**刻意不做**（见 M3 §0.2.1）；
 **CI 已作为工程门槛接入（D40，只校验不部署）**。执行通知支持**企微 / 飞书**两种渠道（D41）。
 
-**当前实现范围**：M1（骨架 + 适配层）+ M2（元素库与多端 Locator）+ M3.1（执行内核）+ M3.3（用例集）+ M3.2（用例编排 / 报告页 / 产物访问）+ M3.4（一键接入）+ M3.5（元素扫描：URL → 候选 → 人工确认落库）+ **M3.6（平台收尾：执行目标 CRUD / 企微通知 / trace·video·HAR）** + **M3.7（飞书通知渠道）** + **M4.1（Android / Appium 平台侧 + 用例固化）**。
-Web 端用 Playwright 真实执行；**Android 用 Appium 真机执行（M4.1 已实现 12/28 动作，见 `docs/UI自动化平台M4详细设计.md`）**；uiautomator2 仍是桩（M4.3）。
+**当前实现范围**：M1（骨架 + 适配层）+ M2（元素库与多端 Locator）+ M3.1（执行内核）+ M3.3（用例集）+ M3.2（用例编排 / 报告页 / 产物访问）+ M3.4（一键接入）+ M3.5（元素扫描：URL → 候选 → 人工确认落库）+ **M3.6（平台收尾：执行目标 CRUD / 企微通知 / trace·video·HAR）** + **M3.7（飞书通知渠道）** + **M4.1（Android / Appium 平台侧 + 用例固化）** + **M4.2（手势 / 滑动 / 上下文 + 执行加固）**。
+Web 端用 Playwright 真实执行；**Android 用 Appium 真机执行（M4.2：26 个动作可用 + 2 个平台不适用，见 `docs/UI自动化平台M4详细设计.md`）**；uiautomator2 仍是桩（M4.3）。
 
 ```
 Project(platform, engine_key) ──► EngineRegistry ──► PlaywrightAdapter / AppiumAdapter(桩) / U2Adapter(桩)
@@ -74,7 +74,7 @@ jerryyang-uitestplatform/
 │  │  ├─ schema.sql            13 张表 DDL（MySQL 8，含 M2/M3.3 修正）
 │  │  └─ seed_action_catalog.sql  51 条动作种子（由脚本生成，勿手改）
 │  ├─ fixtures/web/            e2e 静态页面：login / locators / multi-hit
-│  ├─ tests/                   244 个单元测试（target/通知/诊断/扫描/装配/编排…，另 MySQL 集成按需跳过）
+│  ├─ tests/                   273 个单元测试（target/通知/诊断/扫描/装配/编排…，另 MySQL 集成按需跳过）
 │  ├─ requirements.txt · pyproject.toml · .env.example
 │
 ├─ frontend/                   Vue 3 + Vite + TypeScript
@@ -91,7 +91,8 @@ jerryyang-uitestplatform/
    ├─ dev.ps1 / dev.sh         同时起后端(8000) + 前端(5173)
    ├─ serve_fixtures.py        在 8899 端口伺服 e2e 静态页（login / locators / multi-hit / todo）
    ├─ demo_web_case.py         一条 11 步的 Todo 用例：建资产 → 执行 → 打印每步结果
-   ├─ demo_android_case.py     星财富 Android 用例：7 步固化 → 执行 → 报告（M4.1）
+   ├─ demo_android_case.py     星财富 Android 用例：5 步固化 → 执行 → 报告（M4.1）
+   ├─ smoke_android_gestures.py M4.2 真机验收：设置 15 步 + 计算器 9 步（手势/上下文/截图）
    ├─ smoke_m3.py              M3.1 验收（202/重试/产物/报告/WS/并发）
    ├─ smoke_m32.py             M3.2 验收（编排/元素截图/产物/报告幂等/成员开关/筛选/断言/登录态）
    ├─ smoke_m34.py             M3.4 验收（一键装配/幂等/失败不残留/只建不跑）

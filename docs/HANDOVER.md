@@ -19,9 +19,9 @@
 
 | 维度 | 状态 |
 |---|---|
-| 里程碑 | **M1 / M2 / M3.1 / M3.2 / M3.3 / M3.4 / M3.5 / M3.6 / M3.7 全部完成**；**M4.1（Android/Appium 平台侧 + 用例固化）已完成**（11 份施工图） |
+| 里程碑 | **M1 / M2 / M3.1 / M3.2 / M3.3 / M3.4 / M3.5 / M3.6 / M3.7 全部完成**；**M4.1（Android/Appium 平台侧 + 用例固化）与 M4.2（手势/滑动/上下文 + 执行加固）已完成**（11 份施工图） |
 | 规模 | 64 API 操作 · 51 条动作字典 · 13 张表 · 50 个错误码 · 8 个前端页 |
-| 质量基线 | `pytest` **244 passed + 1 skipped**（MySQL 集成按 env 门控）；五份冒烟 **113 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 27）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异 |
+| 质量基线 | `pytest` **273 passed + 1 skipped**（MySQL 集成按 env 门控）；五份冒烟 **113 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 27）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异 |
 | CI | **GitHub Actions 三个 job 全绿**（backend / frontend / e2e），红灯与 `needs` 跳过已实测；`.github/workflows/ci.yml` + 本地同源 `scripts/ci_local.sh`；**无 CD**（D40） |
 | Android | **真机 PJA110（Android 16 / `3149dfe3`）已跑通平台用例**：执行 #125/#126 PASSED，5 步含回退链 `fallback_index=1` 与截图产物；`appium` 已实现 12/28 动作（M4.2 补剩余） |
 | 验收 | 《docs/验收评估报告.md》结论"可进入验收"；**2026-11-02 已自动复跑全部证据并修 2 处**（/scan 文本列表头与折行、m36 V12 空转）→ 只剩用户手工走查 §5.1 手感项 |
@@ -54,7 +54,8 @@
 | 本地 CI 同源检查 | `bash scripts/ci_local.sh`（pytest + lint-imports + 全新库 alembic check + 前端 build；加 `--with-e2e` 需 8000/8899 已起） |
 | 演示用例 | `scripts/demo_web_case.py`（11 步 Todo 全链路） |
 | 能力自检 | `scripts/audit_status.py`（声明 vs 实现 + FR4 签名核对） |
-| Android 用例固化 | `NO_PROXY=127.0.0.1,localhost python scripts/demo_android_case.py`（前置：Appium 4723 + 真机 + 后端 8000） |
+| Android 用例固化 | `NO_PROXY=127.0.0.1,localhost python scripts/demo_android_case.py`（前置：Appium 4723 + 真机 + 后端 8000；先关掉开屏广告） |
+| Android 手势验收 | `NO_PROXY=127.0.0.1,localhost python scripts/smoke_android_gestures.py`（设置 15 步 + 计算器 9 步，均 PASSED） |
 
 ### ⚠️ Git 推送（本机特殊网络，最容易踩的坑）
 
@@ -96,6 +97,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
 | **D40** | **接入 GitHub Actions CI（只校验不部署）：backend / frontend / e2e 三 job；D26 的「不做 CI」就此收窄为「不做 CD」** | 2026-11-04 用户要求；`.github/workflows/ci.yml` |
 | **D41** | **通知渠道单选 `UIP_NOTIFY_CHANNEL=wecom\|feishu`（默认 wecom）；飞书走 interactive 卡片，标题带自定义关键词；不做多渠道并行/管理 UI** | 2026-11-04；M3.7 详细设计；GAP-43 |
 | **D42** | **AppiumAdapter 用 async httpx 直连 Appium REST（`trust_env=False`），不引入同步 Appium-Python-Client；M4.1 只做 Android + 12 个核心动作** | 2026-11-08；M4 详细设计；真机联调实测 |
+| **D43** | **执行必须有限时间结束（M4.2 加固）**：命令硬上限（read timeout + 10%）、瞬时错误限次 3 次、`start_app` 后等前台包名、**执行器单步硬上限 `max(30s, timeout×2+30s)`**；整屏手势从通知栏以下开始 | 2026-11-08；真机遇到「执行永远 RUNNING」，见 M4 §7.8 |
 
 ## 7. 实现踩坑 Top 10（真金白银的教训，勿重蹈）
 

@@ -1,4 +1,4 @@
-"""Appium 适配器（M4.1 / D42）。
+"""Appium 适配器（M4.1 / M4.2 / D42）。
 
 设计取舍：**不复用同步的 Appium-Python-Client**，改为 async httpx 直连 Appium REST。
 理由（都是实测代价换来的）：
@@ -8,8 +8,11 @@
    报 ``FindElementModel: ... 'selector' is not present``；
 3. 不引入 selenium 依赖。
 
-M4.1 只实现 11 个核心动作；其余声明动作继续走基类 ``_not_supported()``
-（``NotImplementedError`` = 该引擎应支持但尚未实现，FR15）。
+动作覆盖（M4.2）：
+- **26 个 Android 可用动作**：核心 12 个 + 手势/滑动/上下文/生命周期 14 个；
+- **2 个平台不适用**（``PLATFORM_INAPPLICABLE``）：``hover`` / ``select_option``
+  —— 声明保留在能力矩阵（appium 也覆盖 iOS），但 Android 上必须明确报错，
+  不允许"静默成功"，否则用户以为跑过了。
 """
 from __future__ import annotations
 
@@ -101,9 +104,75 @@ def _relative_activity(activity: str, package: str) -> str:
     return activity
 
 
+_DIRECTIONS = ("up", "down", "left", "right")
+
+#: ``element_scroll`` 的 ``direction`` 是**内容方向**（与 Web ``page_scroll`` 一致），
+#: 这里翻成手指方向；``page_swipe`` / ``swipe_*`` / ``multi_finger_swipe`` 直接用手指方向。
+_CONTENT_TO_FINGER = {"down": "up", "up": "down", "right": "left", "left": "right"}
+
+
+def _finger_direction(value: str) -> str:
+    direction = str(value or "").strip().lower()
+    if direction not in _DIRECTIONS:
+        raise ValueError(f"direction 只能是 {'/'.join(_DIRECTIONS)}：{value}")
+    return direction
+
+
+def _content_direction(value: str) -> str:
+    return _CONTENT_TO_FINGER[_finger_direction(value)]
+
+
+def _clamp_percent(value: Any) -> float:
+    """UiAutomator2 的 ``percent`` 必须在 (0, 1) 内，越界会被驱动拒绝。"""
+    try:
+        percent = float(value)
+    except (TypeError, ValueError):
+        percent = 0.5
+    return round(max(0.05, min(0.95, percent)), 3)
+
+
+#: 驱动传输层瞬时错误的特征串（App 启动瞬间 / uiautomator2 server 重启时高频出现）。
+#: 这类错误重试有意义，但**必须限次** —— 真机上每次要 3 秒，无限重试会把一步拖到分钟级。
+_TRANSIENT_MARKERS = (
+    "could not proxy command",
+    "cannot be proxied",
+    "instrumentation process is not running",
+    "socket hang up",
+    "econnreset",
+    "connection reset",
+    "readtimeout",
+    "unknown error",
+)
+
+MAX_TRANSIENT_RETRIES = 3
+
+
+def _is_transient_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _TRANSIENT_MARKERS)
+
+
+def _timeout_seconds(value: Any, default: float = 60.0) -> float:
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    read = getattr(value, "read", None)
+    return float(read) if isinstance(read, (int, float)) and read > 0 else default
+
+
+
+
 class AppiumAdapter(EngineAdapter):
     key = "appium"
     platforms = frozenset({Platform.ANDROID, Platform.IOS})
+
+    #: 声明在能力矩阵里、但 Android 上没有对应语义的动作（iOS/Web 才有）。
+    #: 保留声明是为了不破坏跨平台契约；Android 上调用必须**明确报错**。
+    PLATFORM_INAPPLICABLE = {
+        "hover": "触屏无 pointer hover 语义；请改用 click / long_press",
+        "select_option": "Android 原生无 select 下拉控件；请改用 click 展开 + click 选项",
+    }
 
     def __init__(self) -> None:
         super().__init__()
@@ -216,7 +285,17 @@ class AppiumAdapter(EngineAdapter):
                        timeout: httpx.Timeout | float | None = None) -> Any:
         if self._client is None:
             raise RuntimeError("Appium 客户端尚未初始化")
-        resp = await self._client.request(method, path, json=json_body, timeout=timeout)
+        # 命令级硬上限：httpx 的 read timeout 挡不住"慢速滴流"响应，这里再兜一层
+        base_timeout = _timeout_seconds(timeout)
+        hard_timeout = base_timeout + max(1.0, min(5.0, base_timeout * 0.1))
+        try:
+            resp = await asyncio.wait_for(
+                self._client.request(method, path, json=json_body, timeout=timeout),
+                timeout=hard_timeout)
+        except TimeoutError as exc:
+            raise RuntimeError(
+                f"Appium {method} {path} 超过 {hard_timeout:.0f}s 未返回"
+                f"（命令级硬上限，通常是设备/驱动卡死）") from exc
         try:
             data = resp.json()
         except ValueError as exc:
@@ -242,37 +321,55 @@ class AppiumAdapter(EngineAdapter):
     # ───────────────────────── 回退链 ─────────────────────────
     async def _find(self, chain: LocatorChain, ctx: ActionContext, *,
                     timeout_ms: int | None = None, multiple: bool = False):
-        """沿回退链找元素；每条候选最多 ``min(总超时, 2500ms)``，末条用满。"""
+        """沿回退链找元素；每条候选最多 ``min(总超时, 2500ms)``，末条用满。
+
+        M4.2 加固（真机踩过）：用 ``time.perf_counter()`` 而不是事件循环时钟计时，
+        并对**驱动传输层连续失败**（如 ``500 Could not proxy command``）快速放弃 ——
+        否则 App 启动瞬间每次请求要 3 秒，重试会把一步拖到分钟级。
+        """
         timeout = ctx.timeout_ms if timeout_ms is None else max(0, timeout_ms)
         total = len(chain.locators)
         last_error: Exception | None = None
-        loop = asyncio.get_running_loop()
+        started = time.perf_counter()
 
         for index, loc in enumerate(chain.locators):
             per_timeout = timeout if index == total - 1 else min(timeout, 2500)
-            deadline = loop.time() + per_timeout / 1000
+            loc_deadline = time.perf_counter() + per_timeout / 1000
+            transient_failures = 0
             while True:
                 try:
                     using, value = translate_locator(loc)
+                    # 单次请求单独限时：避免一条卡死的命令吃掉整条候选的预算
+                    remaining = max(0.5, loc_deadline - time.perf_counter())
                     elements = await self._cmd(
-                        "POST", "/elements", json_body={"using": using, "value": value})
+                        "POST", "/elements",
+                        json_body={"using": using, "value": value},
+                        timeout=max(3.0, min(8.0, remaining)))
+                    transient_failures = 0
                     if isinstance(elements, list) and elements:
                         ctx.emit("locator.hit", element_id=chain.element_id,
                                  locator_id=loc.locator_id, fallback_index=index)
                         return elements if multiple else elements[0]
                 except Exception as exc:            # 本条失败 → 回退下一条
                     last_error = exc
-                if loop.time() >= deadline:
+                    if _is_transient_error(exc):
+                        transient_failures += 1
+                        if transient_failures >= MAX_TRANSIENT_RETRIES:
+                            break                   # 驱动连着不行 → 本条定位符直接放弃
+                if time.perf_counter() >= loc_deadline:
                     break
                 await asyncio.sleep(0.2)
             ctx.emit("locator.miss", element_id=chain.element_id,
                      locator_id=loc.locator_id, fallback_index=index,
                      error=str(last_error)[:200] if last_error else "no match")
 
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
         raise LocatorNotFoundError(
-            f"元素 {chain.element_id} 的全部 {total} 条定位符均未命中：{last_error}",
-            {"element_id": chain.element_id, "locators": total},
+            f"元素 {chain.element_id} 的全部 {total} 条定位符均未命中"
+            f"（{elapsed_ms}ms）：{last_error}",
+            {"element_id": chain.element_id, "locators": total, "elapsed_ms": elapsed_ms},
         )
+
 
     @staticmethod
     def _element_id(element: Any) -> str:
@@ -282,6 +379,68 @@ class AppiumAdapter(EngineAdapter):
         if not eid:
             raise RuntimeError(f"Appium 元素缺少 id：{element!r}"[:300])
         return str(eid)
+
+    # ─────────────────────── 手势与几何（M4.2）───────────────────────
+    async def _execute(self, script: str, args: list[dict] | None = None) -> Any:
+        """执行 UiAutomator2 的 ``mobile:`` 命令（走 W3C ``/execute/sync``）。"""
+        return await self._cmd("POST", "/execute/sync",
+                               json_body={"script": script, "args": args or []})
+
+    async def _gesture(self, name: str, params: dict[str, Any]) -> None:
+        await self._execute(f"mobile: {name}", [params])
+
+    async def _rect(self, element: Any) -> dict[str, int]:
+        value = await self._cmd("GET", f"/element/{self._element_id(element)}/rect")
+        if not isinstance(value, dict):
+            raise RuntimeError(f"Appium 返回的 rect 异常：{value!r}"[:200])
+        return {k: int(value.get(k) or 0) for k in ("x", "y", "width", "height")}
+
+    @staticmethod
+    def _center(rect: dict[str, int]) -> tuple[int, int]:
+        return rect["x"] + rect["width"] // 2, rect["y"] + rect["height"] // 2
+
+    async def _screen(self) -> dict[str, int]:
+        value = await self._cmd("GET", "/window/rect")
+        if not isinstance(value, dict):
+            raise RuntimeError(f"Appium 返回的 window rect 异常：{value!r}"[:200])
+        return {"left": 0, "top": 0,
+                "width": int(value.get("width") or 0),
+                "height": int(value.get("height") or 0)}
+
+    async def _gesture_bounds(self) -> dict[str, int]:
+        """整屏手势的安全区域：**必须避开状态栏/导航栏**。
+
+        真机实测（M4.2）：从屏幕最顶部下滑会把系统通知栏拉下来，
+        之后 ``mCurrentFocus=NotificationShade``，所有元素定位都会落空 ——
+        表现为"上一步成功、下一步莫名找不到元素"。内缩由 ``options.gesture_inset_px``
+        覆盖，默认取屏高的 8%（下限 120px）。
+        """
+        screen = await self._screen()
+        inset = _as_int(self._options.get("gesture_inset_px"), 0)
+        if inset <= 0:
+            inset = max(120, int(screen["height"] * 0.08))
+        return {"left": inset, "top": inset,
+                "width": max(1, screen["width"] - inset * 2),
+                "height": max(1, screen["height"] - inset * 2)}
+
+    async def _swipe(self, finger_direction: str, percent: float, *,
+                     element_id: str | None = None,
+                     bounds: dict[str, int] | None = None) -> None:
+        params: dict[str, Any] = {"direction": finger_direction,
+                                  "percent": _clamp_percent(percent)}
+        if element_id:
+            params["elementId"] = element_id
+        elif bounds:
+            params.update(bounds)
+        await self._gesture("swipeGesture", params)
+
+    def _platform_inapplicable(self, action_key: str) -> None:
+        reason = self.PLATFORM_INAPPLICABLE[action_key]
+        raise UnsupportedActionError(
+            f"appium(Android) 不适用动作 {action_key}：{reason}",
+            {"engine_key": self.key, "action_key": action_key, "platform": "ANDROID"},
+        )
+
 
     # ───────────────────────── 核心动作 ─────────────────────────
     async def click(self, chain: LocatorChain, ctx: ActionContext, **_) -> None:
@@ -313,15 +472,34 @@ class AppiumAdapter(EngineAdapter):
 
     async def wait_element(self, chain: LocatorChain, ctx: ActionContext, *,
                            state: str = "visible", timeout_ms: int | None = None) -> None:
+        """M4.2：四态都支持（visible / attached / hidden / detached）。
+
+        ``hidden`` / ``detached`` 是**等待消失**，超时抛 ``TimeoutError`` → 步骤 ``ERROR``，
+        与 Playwright 的 ``wait_for(state="hidden")`` 语义一致。
+        """
         state = (state or "visible").strip().lower()
-        timeout = timeout_ms or ctx.timeout_ms
-        if state not in ("visible", "attached"):
-            # M4.1 只支持 positive wait；hidden 归 M4.2
-            raise UnsupportedActionError(
-                f"Appium 适配器暂不支持 wait_element(state={state})",
+        timeout = ctx.timeout_ms if timeout_ms is None else max(0, timeout_ms)
+        if state in ("visible", "attached"):
+            await self._find(chain, ctx, timeout_ms=timeout)
+            return
+        if state not in ("hidden", "detached"):
+            raise ValidationFailed(
+                f"未知 wait_element(state={state})；支持 visible / attached / hidden / detached",
                 {"state": state},
             )
-        await self._find(chain, ctx, timeout_ms=timeout)
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout / 1000
+        while True:
+            try:
+                await self._find(chain, ctx, timeout_ms=0)
+            except LocatorNotFoundError:
+                return
+            if loop.time() >= deadline:
+                raise TimeoutError(
+                    f"等待元素消失超时（{timeout}ms）：元素 {chain.element_id} 仍然存在")
+            await asyncio.sleep(0.2)
+
 
     async def check_exists(self, chain: LocatorChain, ctx: ActionContext, *,
                            output_var: str | None = None) -> bool:
@@ -334,15 +512,143 @@ class AppiumAdapter(EngineAdapter):
 
     async def element_list(self, chain: LocatorChain, ctx: ActionContext, *,
                            output_var: str | None = None) -> list:
+        """M4.2：返回形状与 Playwright 对齐 —— ``[{index, text, visible}]``（上限 200）。
+
+        形状不一致会让"Web 用例换 Android 引擎就崩"，这是跨引擎一致性的硬要求。
+        """
         elements = await self._find(chain, ctx, multiple=True)
-        texts: list[str] = []
-        for element in elements:
+        items: list[dict[str, Any]] = []
+        for index, element in enumerate(elements[:200]):
+            eid = self._element_id(element)
+            text, visible = "", True
             try:
-                text = await self._cmd("GET", f"/element/{self._element_id(element)}/text")
-                texts.append(str(text or ""))
+                text = str(await self._cmd("GET", f"/element/{eid}/text") or "")[:200]
             except Exception:                       # 单个元素取文本失败不影响整体
-                texts.append("")
-        return ctx.set_var(output_var, texts)
+                text = ""
+            try:
+                visible = bool(await self._cmd("GET", f"/element/{eid}/displayed"))
+            except Exception:
+                visible = True
+            items.append({"index": index, "text": text, "visible": visible})
+        return ctx.set_var(output_var, items)
+
+
+    # ───────────────────────── 手势与滑动（M4.2）─────────────────────────
+    async def hover(self, chain, ctx, **_) -> None:
+        """Android 无 hover 语义 —— 明确报错，不做"静默成功"。"""
+        self._platform_inapplicable("hover")
+
+    async def select_option(self, chain, ctx, *, value: str | None = None,
+                            label: str | None = None, index: int | None = None) -> None:
+        """Android 原生无 select 控件 —— 明确报错（该动作字典里本就标注 WEB/IOS）。"""
+        self._platform_inapplicable("select_option")
+
+    async def double_click(self, chain, ctx, **_) -> None:
+        element = await self._find(chain, ctx)
+        await self._gesture("doubleClickGesture",
+                            {"elementId": self._element_id(element)})
+
+    async def long_press(self, chain, ctx, *, duration_ms: int = 1000) -> None:
+        element = await self._find(chain, ctx)
+        await self._gesture("longClickGesture", {
+            "elementId": self._element_id(element),
+            "duration": max(1, int(duration_ms)),
+        })
+
+    async def coordinate_click(self, chain, ctx, *, x: int, y: int) -> None:
+        await self._gesture("clickGesture", {"x": int(x), "y": int(y)})
+
+    async def drag(self, chain, ctx, *, target_element_id: int | None = None,
+                   duration_ms: int = 500) -> None:
+        if target_element_id is None:
+            raise ValueError("drag 需要 target_element_id")
+        target_chain = ctx.resolved_chains.get(int(target_element_id))
+        if target_chain is None:
+            raise ValueError(f"执行器未预解析目标元素 {target_element_id} 的定位链")
+
+        source = await self._find(chain, ctx)
+        target = await self._find(target_chain, ctx)
+        sx, sy = self._center(await self._rect(source))
+        tx, ty = self._center(await self._rect(target))
+        distance = max(1.0, ((tx - sx) ** 2 + (ty - sy) ** 2) ** 0.5)
+        # duration_ms → 速度（px/s）：dragGesture 用 speed 而不是时长
+        speed = max(200.0, min(10_000.0, distance / max(0.1, int(duration_ms) / 1000)))
+        await self._gesture("dragGesture", {
+            "elementId": self._element_id(source),
+            "endX": tx, "endY": ty, "speed": int(speed),
+        })
+
+    async def element_scroll(self, chain, ctx, *, direction: str = "down",
+                             distance: int = 300) -> None:
+        """元素内滚动。``direction`` 是**内容方向**（down = 看更下面的内容）。"""
+        finger = _content_direction(direction)
+        element = await self._find(chain, ctx)
+        rect = await self._rect(element)
+        key = "width" if finger in ("left", "right") else "height"
+        await self._swipe(finger, int(distance) / max(1, rect[key]),
+                          element_id=self._element_id(element))
+
+    async def page_swipe(self, chain, ctx, *, direction: str = "up",
+                         distance: int = 300) -> None:
+        """整屏滑动。``direction`` 是**手指方向**（up = 手指上划）。"""
+        finger = _finger_direction(direction)
+        bounds = await self._gesture_bounds()
+        key = "width" if finger in ("left", "right") else "height"
+        await self._swipe(finger, int(distance) / max(1, bounds[key]), bounds=bounds)
+
+
+    async def swipe_up(self, chain, ctx, *, distance: int = 300) -> None:
+        await self.page_swipe(chain, ctx, direction="up", distance=distance)
+
+    async def swipe_down(self, chain, ctx, *, distance: int = 300) -> None:
+        await self.page_swipe(chain, ctx, direction="down", distance=distance)
+
+    async def multi_finger_swipe(self, chain, ctx, *, direction: str = "up",
+                                 distance: int = 300) -> None:
+        """双指同向滑动（捏合类场景用 ``pinch*``，这里只做平行双指）。"""
+        finger = _finger_direction(direction)
+        bounds = await self._gesture_bounds()
+        cx = bounds["left"] + bounds["width"] // 2
+        cy = bounds["top"] + bounds["height"] // 2
+        spread = min(120, max(20, bounds["width"] // 6, bounds["height"] // 6))
+        travel = min(int(distance), bounds["height"] // 2 if finger in ("up", "down")
+                     else bounds["width"] // 2)
+        dx, dy = {"up": (0, -travel), "down": (0, travel),
+                  "left": (-travel, 0), "right": (travel, 0)}[finger]
+        actions: list[dict[str, Any]] = []
+        for index, offset in enumerate((-spread // 2, spread // 2), start=1):
+            start_x, start_y = ((cx + offset, cy) if finger in ("up", "down")
+                                else (cx, cy + offset))
+            actions.append({
+                "type": "pointer", "id": f"finger{index}",
+                "parameters": {"pointerType": "touch"},
+                "actions": [
+                    {"type": "pointerMove", "duration": 0,
+                     "x": start_x, "y": start_y},
+                    {"type": "pointerDown", "button": 0},
+                    {"type": "pointerMove", "duration": 600,
+                     "x": start_x + dx, "y": start_y + dy},
+                    {"type": "pointerUp", "button": 0},
+                ],
+            })
+        await self._cmd("POST", "/actions", json_body={"actions": actions})
+
+    async def scroll_to_element(self, chain, ctx, **_) -> None:
+        """滑屏直到元素出现（上限 ``ctx.timeout_ms``，每次滑 40% 安全区高度）。"""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max(500, ctx.timeout_ms) / 1000
+        bounds = await self._gesture_bounds()
+        while True:
+            try:
+                await self._find(chain, ctx, timeout_ms=0)
+                return
+            except LocatorNotFoundError:
+                pass
+            if loop.time() >= deadline:
+                raise TimeoutError(
+                    f"scroll_to_element 超时（{ctx.timeout_ms}ms）：元素 {chain.element_id} 未出现")
+            await self._swipe("up", 0.4, bounds=bounds)   # 手指上划 = 看下面
+            await asyncio.sleep(0.3)
 
     async def screenshot(self, chain: LocatorChain | None, ctx: ActionContext, *,
                          path: str | None = None, full_page: bool = False,
@@ -350,11 +656,13 @@ class AppiumAdapter(EngineAdapter):
         if target not in ("page", "element"):
             raise ValueError(f"未知截图目标：{target}（只支持 page / element）")
         if target == "element":
-            raise UnsupportedActionError(
-                "Appium 元素级截图 M4.2 实现；当前请用 target=page",
-                {"target": target},
-            )
-        b64 = await self._cmd("GET", "/screenshot")
+            if chain is None:
+                raise ValueError("screenshot(target=element) 需要绑定元素")
+            element = await self._find(chain, ctx)
+            b64 = await self._cmd(
+                "GET", f"/element/{self._element_id(element)}/screenshot")
+        else:
+            b64 = await self._cmd("GET", "/screenshot")
         os.makedirs(settings.artifacts_dir, exist_ok=True)
         target_path = path or os.path.join(
             settings.artifacts_dir,
@@ -373,6 +681,27 @@ class AppiumAdapter(EngineAdapter):
                                    {"missing": "app_package"})
         return package
 
+    async def _wait_for_package(self, package: str, timeout_s: float = 10.0) -> None:
+        """等 App 真的到前台。
+
+        真机实测：``terminate_app`` + ``activate_app`` 后 uiautomator2 的 instrumentation
+        需要几百毫秒到几秒才恢复；这期间元素命令会挂到超时（表现为"点一下卡一分钟"）。
+        先确认前台包名，把这段抖动挡在第一步动作之外。
+        """
+        deadline = time.perf_counter() + timeout_s
+        while time.perf_counter() < deadline:
+            try:
+                current = await self._cmd("GET", "/appium/device/current_package",
+                                          timeout=5.0)
+                if str(current or "") == package:
+                    return
+            except Exception:                       # 会话刚恢复时命令可能失败，重试即可
+                logger.debug("current_package probe failed", exc_info=True)
+            await asyncio.sleep(0.3)
+        logger.warning("App 未在前台（%s）：超时 %.0fs，后续元素命令可能失败",
+                       package, timeout_s, extra={"event": "app.not_ready",
+                                                  "app_package": package})
+
     async def start_app(self, chain, ctx, *, app_package: str | None = None,
                         app_activity: str | None = None) -> None:
         package = self._package(app_package)
@@ -388,6 +717,8 @@ class AppiumAdapter(EngineAdapter):
         else:
             await self._cmd("POST", "/appium/device/activate_app",
                             json_body={"appId": package})
+        await self._wait_for_package(package)
+
 
     async def stop_app(self, chain, ctx, *, app_package: str | None = None) -> None:
         await self._cmd("POST", "/appium/device/terminate_app",
@@ -405,6 +736,58 @@ class AppiumAdapter(EngineAdapter):
     async def go_home(self, chain, ctx) -> None:
         await self._cmd("POST", "/appium/device/press_keycode",
                         json_body={"keycode": 3})
+
+    async def background_foreground(self, chain, ctx, *, seconds: int = 3) -> None:
+        """切后台 N 秒再切回前台（验证"杀后台恢复"这类场景）。"""
+        package = self._package(None)
+        await self._cmd("POST", "/appium/app/background",
+                        json_body={"seconds": max(1, int(seconds))})
+        await self._cmd("POST", "/appium/device/activate_app", json_body={"appId": package})
+
+    async def fix_orientation(self, chain, ctx, *, orientation: str = "PORTRAIT") -> None:
+        value = str(orientation or "").strip().upper()
+        if value not in ("PORTRAIT", "LANDSCAPE"):
+            raise ValueError(f"orientation 只能是 PORTRAIT / LANDSCAPE：{orientation}")
+        try:
+            await self._cmd("POST", "/orientation", json_body={"orientation": value})
+        except RuntimeError as exc:
+            message = str(exc)
+            if "rotation cannot be changed" in message or "Is it locked" in message:
+                # 真机实测：系统「自动旋转」关闭、或被测 App 自己锁了方向时，驱动会转不动。
+                # 这不是平台 bug，但裸错误没法排障，补一句人话。
+                raise RuntimeError(
+                    f"设备旋转被锁定，无法切到 {value}：请在设备下拉通知栏打开「自动旋转」，"
+                    f"或确认被测 App 没有锁定屏幕方向（原始错误：{message}）"[:600]) from exc
+            raise
+
+
+    # ───────────────────────── 上下文（M4.2）─────────────────────────
+    async def get_contexts(self, chain, ctx, *, output_var: str | None = None) -> list:
+        contexts = await self._cmd("GET", "/contexts")
+        items = [str(item) for item in contexts] if isinstance(contexts, list) else []
+        ctx.emit("context.list", contexts=items)
+        return ctx.set_var(output_var, items)
+
+    async def switch_to_context(self, chain, ctx, *, context: str) -> None:
+        """切换上下文（``NATIVE_APP`` ↔ ``WEBVIEW_*``）。
+
+        先查 ``/contexts`` 再切：不存在的名字直接给"可用列表"，
+        比让 Appium 抛出裸错误更好排障。
+        """
+        name = str(context or "").strip()
+        if not name:
+            raise ValidationFailed("switch_to_context 需要 context 名称",
+                                   {"missing": "context"})
+        contexts = await self._cmd("GET", "/contexts")
+        available = [str(item) for item in contexts] if isinstance(contexts, list) else []
+        if name not in available:
+            raise ValidationFailed(
+                f"设备上不存在上下文 {name}；当前可用：{available or '无'}",
+                {"context": name, "available": available},
+            )
+        await self._cmd("POST", "/context", json_body={"name": name})
+        ctx.emit("context.switch", context=name)
+
 
     # ───────────────────────── 诊断 ─────────────────────────
     async def probe_locator(self, chain: LocatorChain, ctx: ActionContext) -> LocatorProbe:

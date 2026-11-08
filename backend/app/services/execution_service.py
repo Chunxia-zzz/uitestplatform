@@ -311,6 +311,10 @@ async def _run_case(db: AsyncSession, execution: Execution, project, adapter,
                 variables=case_vars, log=collector,
             )
             step_started = time.perf_counter()
+            # 单步硬上限：动作必须在自己时间预算内结束。
+            # 兜住「驱动卡死 → 这一步永不返回 → 执行永远 RUNNING」（M4.2 真机踩过：
+            # App 启动瞬间驱动连续返回 500，重试把一步拖到 180s+）。
+            budget_s = max(30.0, ctx.timeout_ms / 1000 * 2 + 30)
             try:
                 spec = ACTION_BY_KEY.get(step.action_key)
                 if spec is None:
@@ -335,10 +339,21 @@ async def _run_case(db: AsyncSession, execution: Execution, project, adapter,
                     ref = int(params["target_element_id"])
                     ctx.resolved_chains[ref] = await resolve_chain_for(
                         db, ref, str(project.platform), project.engine_key)
-                await dispatch(step.action_key, adapter, chain, params, ctx)
+                await asyncio.wait_for(
+                    dispatch(step.action_key, adapter, chain, params, ctx),
+                    timeout=budget_s)
                 final_status, final_message = StepStatus.PASSED, None
             except AssertionError as exc:
                 final_status, final_message = StepStatus.FAILED, str(exc)
+            except TimeoutError as exc:
+                # 注意：动作内部也会抛 TimeoutError（如 wait_element(hidden) 等待消失超时），
+                # 只有"耗时已经顶到预算"才判为硬上限触发，避免把两种超时混成一句。
+                final_status = StepStatus.ERROR
+                if time.perf_counter() - step_started >= budget_s - 1:
+                    final_message = (f"步骤执行超过硬上限 {budget_s:.0f}s，"
+                                     f"驱动可能卡死：{type(exc).__name__}")
+                else:
+                    final_message = f"{type(exc).__name__}: {exc}"
             except Exception as exc:                   # 含 LocatorNotFoundError
                 final_status = StepStatus.ERROR
                 final_message = f"{type(exc).__name__}: {exc}"

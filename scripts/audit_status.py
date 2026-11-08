@@ -76,15 +76,28 @@ def audit_engine(engine: str) -> tuple[list[str], list[str], list[str]]:
     return done, missing, sig_bad
 
 
+def inapplicable_keys(engine: str) -> list[str]:
+    """声明在矩阵里、但当前平台没有语义的动作（如 Android 的 hover / select_option）。
+
+    这些方法**确实覆写了**，但调用会明确抛 UnsupportedActionError ——
+    必须在自检里单独可见，否则"28/28 全绿"会掩盖"两条其实用不了"。
+    """
+    cls = ADAPTERS[engine]
+    declared = set(CAPABILITY_MATRIX[engine])
+    return sorted(declared & set(getattr(cls, "PLATFORM_INAPPLICABLE", {})))
+
+
 def main() -> int:
     print("=" * 78)
     print("引擎能力自检（声明 vs 实现）")
     print("=" * 78)
     for engine, meta in ENGINES.items():
         done, missing, sig_bad = audit_engine(engine)
+        inapplicable = inapplicable_keys(engine)
         total = len(CAPABILITY_MATRIX[engine])
+        extra = f" · 平台不适用 {len(inapplicable)}（{', '.join(inapplicable)}）" if inapplicable else ""
         print(f"\n[{engine}] 声明 {total} 个动作 · 真实现 {len(done)} · 仅继承默认 {len(missing)}"
-              f" · implemented={meta.implemented}")
+              f"{extra} · implemented={meta.implemented}")
         if missing:
             print("  未覆写（运行时会抛 NotImplementedError）:")
             print("   ", ", ".join(missing))

@@ -271,9 +271,120 @@ project (platform=ANDROID, engine_key=appium, target_id)
 
 ---
 
+## 7. M4.2 增补设计（剩余动作 + 上下文）
+
+### 7.1 范围与验收锚点
+
+| 项 | 内容 |
+|---|---|
+| 目标 | 把 appium 从 12/28 补到 **26 个 Android 可用动作 + 2 个平台不适用**；补 WebView 上下文；修 M4.1 两处欠账（`wait_element(state=hidden)`、`screenshot(target=element)`） |
+| 不改 | 动作契约（方法名/keyword）、`params_schema`、64 个 REST 端点、数据模型、`CAPABILITY_MATRIX` 的 28 条声明 |
+| 验收 | ① `pytest` 全绿（新增约 18 条）；② `audit_status` 报 **28/28 覆写（2 条平台不适用）**；③ 真机平台执行：一条 15 步「手势 + 上下文」用例 **PASSED**；④ M4.1 星财富用例回归仍 PASSED |
+
+### 7.2 动作映射（Appium 端点 / UiAutomator2 命令）
+
+| 动作 | 实现 | 端点 / 命令 | 关键参数 |
+|---|---|---|---|
+| `long_press` | 手势 | `mobile: longClickGesture` | `elementId`、`duration`（ms，默认 1000） |
+| `double_click` | 手势 | `mobile: doubleClickGesture` | `elementId` |
+| `coordinate_click` | 手势 | `mobile: clickGesture` | `x`、`y`（屏幕绝对坐标） |
+| `drag` | 手势 | `mobile: dragGesture` | `elementId`（源）+ `endX/endY`（目标元素中心）+ `speed`（由 `duration_ms` 反算） |
+| `element_scroll` | 元素内滑动 | `mobile: swipeGesture` | `elementId` + `direction` + `percent`（`distance/元素高度`，clamp 0.05–0.95） |
+| `page_swipe` | 整屏滑动 | `mobile: swipeGesture` | 屏幕 `left/top/width/height` + `direction` + `percent`（`distance/屏幕高或宽`） |
+| `swipe_up` / `swipe_down` | 整屏滑动特例 | 同上 | `direction=up/down` |
+| `multi_finger_swipe` | 双指 W3C actions | `POST /actions`（两 pointer，`pointerType=touch`） | `direction`、`distance`，两指水平错开 120px |
+| `scroll_to_element` | 轮询 + 滑屏 | 循环 `swipeGesture` 直到命中或超时 | `ctx.timeout_ms` 为上限，每次滑 40% 屏高，间隔 300ms |
+| `background_foreground` | 前后台 | `POST /appium/app/background` → `activate_app` | `seconds`（默认 3） |
+| `fix_orientation` | 屏幕方向 | `POST /orientation` | `orientation=PORTRAIT/LANDSCAPE` |
+| `get_contexts` | 上下文列表 | `GET /contexts` | `output_var` |
+| `switch_to_context` | 切上下文 | `POST /context` | `context`；切换前先校验存在于 `/contexts` |
+| `wait_element(state=hidden/detached)` | 等待消失 | 轮询 `_find(timeout_ms=0)` | 超时抛 `TimeoutError`（→ `ERROR`，与 Playwright 语义一致） |
+| `screenshot(target=element)` | 元素级截图 | `GET /element/{id}/screenshot` | 需绑定元素 |
+
+**平台不适用（2 条，声明保留在矩阵，方法内明确报错）**：
+
+| 动作 | 原因 | 报错 |
+|---|---|---|
+| `hover` | 触屏无 pointer hover 语义（Android 手势体系里不存在） | `UnsupportedActionError`，提示改用 `click` / `long_press` |
+| `select_option` | Android 原生无 `<select>`/Picker 统一控件（该动作在字典里本就标注 `WEB/IOS`） | `UnsupportedActionError`，提示改用 `click` 展开 + `click` 选项 |
+
+> 为什么保留声明不改矩阵：`CAPABILITY_MATRIX` 是跨平台契约（appium 覆盖 ANDROID + IOS），删除会让 iOS 侧丢能力；且矩阵属冻结契约，不在实现里程碑里改。改由 `audit_status.py` 单列"平台不适用"，避免把"声明了但 Android 用不了"藏起来。
+
+### 7.3 两处行为修正（M4.1 欠账）
+
+| 项 | M4.1 | M4.2 | 理由 |
+|---|---|---|---|
+| `element_list` 返回形状 | 文本字符串数组 | `[{index, text, visible}]`，上限 200 | 与 Playwright **同形**；不同引擎返回不同形状会让"换引擎用例就崩"，这是跨引擎一致性的硬要求 |
+| `wait_element` 的 `state` | 只 `visible`/`attached`，其余报错 | 四个值都支持 | Playwright 一直支持四个值，Web 用例已有用 `hidden` 的写法 |
+
+### 7.4 方向语义（必须先定清，否则用例换个 App 就反了）
+
+| 动作 | `direction` 指什么 | `down` 的实际效果 |
+|---|---|---|
+| `page_swipe` / `swipe_up` / `swipe_down` / `multi_finger_swipe` | **手指方向** | 手指向上划 |
+| `element_scroll` | **内容方向**（与 Web `page_scroll` 一致） | 看到元素内更下方的内容（手指向上划） |
+
+映射在适配器内统一收口（`_gesture_direction()`），用例侧只写业务语义。**方向的实际屏幕效果在真机上核对过**（§7.6），不靠文档推断。
+
+### 7.5 WebView 上下文边界
+
+- 本批实现 `get_contexts` / `switch_to_context`（Android 侧返回 `NATIVE_APP`，若 App 开启 WebView 调试则含 `WEBVIEW_*` / `CHROMIUM`）。
+- **切到 WebView 后的元素查找**由 Appium 代理到 chromedriver，前提是被测 App 为 debug 包且开启 WebView 调试；这部分**本批只验证"能列出、能切、能切回"**，WebView 内部元素自动化列为 **GAP-47**（需业务方提供 debug 包与 H5 页面）。
+- 上下文不粘滞：每个 `switch_to_context` 都是显式动作，执行器不自动重置（与 Playwright `switch_to_iframe` 栈语义不同，Appium 是全局单上下文）。
+
+### 7.6 测试与真机验收
+
+**单测**（`tests/unit/test_appium_adapter.py` 追加，约 18 条）：每个手势命令的 `mobile: xxx` 名字与参数、`drag` 目标链缺失报错、`element_scroll` percent 计算与 clamp、`multi_finger_swipe` 两个 pointer、`get_contexts` 存变量、`switch_to_context` 校验不存在上下文、`wait_element(hidden)` 命中/超时、`screenshot(element)`、`element_list` 形状、`hover`/`select_option` 报错文案。
+
+**真机验收**（系统设置 App 作沙箱，避免改动星财富自选顺序）：
+
+1. 平台建项目 `Android 手势自检`（`ANDROID` + `appium`，target `app_package=com.android.settings`）；
+2. 一条 15 步用例：`restart_app` → `get_contexts` → `switch_to_context(NATIVE_APP)` → `long_press` → `double_click` → `coordinate_click` → `page_swipe(up)` → `swipe_down` → `element_scroll` → `multi_finger_swipe` → `scroll_to_element` → `background_foreground` → `fix_orientation` → `wait_element(hidden)` → `screenshot(element)`；
+3. 观察 `PASSED` 与步骤 `used_locator_id` / 产物；
+4. 跑 `scripts/demo_android_case.py`（星财富 M4.1 用例）确认无回归。
+
+### 7.7 真机验收结果（2026-11-08，PJA110 / Android 16）
+
+| 用例集 | 执行 | 结果 | 覆盖 |
+|---|---|---|---|
+| M4.2 手势自检（设置） | #133 / #140 | **15/15 PASSED** | `get_contexts` · `switch_to_context` · `page_swipe` · `swipe_down` · `element_scroll` · `scroll_to_element`（"关于本机" 首屏外）· `element_list` · `multi_finger_swipe` · `wait_element(hidden)` · `background_foreground` · 元素级 + 页面级截图 |
+| M4.2 手势自检（计算器） | #134 / #141 | **9/9 PASSED** | `long_press` · `double_click` · `coordinate_click` · `drag` · `fix_orientation` ×2 · 截图 |
+| M4.1 星财富回归 | #137/#138 → **#139** | 修复后 **5/5 PASSED**（fallback=1） | `start_app` · 回退链 · 断言 · 截图 |
+
+产物核对：元素级截图 3.5 KB（仅 WLAN 文字），页面级 210 KB —— 证明 `screenshot(target=element)`
+真的按元素裁剪，不是整屏。
+
+### 7.8 真机踩坑与加固（这一节是本次最主要的产出）
+
+| # | 现象 | 根因 | 加固 |
+|---|---|---|---|
+| 1 | 滑动后的步骤全部定位不到元素 | `swipeGesture` 从屏幕最顶部开始，把**系统通知栏**拉了下来（`mCurrentFocus=NotificationShade`） | 整屏手势统一内缩：`_gesture_bounds()` 取屏高 8%（下限 120px），可用 `options.gesture_inset_px` 覆盖 |
+| 2 | `fix_orientation` 报 `Screen rotation cannot be changed ... Is it locked?` | ① 系统「自动旋转」关闭；② ColorOS 设置在清单里锁了竖屏 | 错误翻译成人话（提示开自动旋转 / App 锁方向）；验收用例把旋转放在计算器（支持旋转）而非设置 |
+| 3 | App 重启后第一步点击**卡 1 分钟以上**，执行永远 RUNNING | `terminate_app`+`activate_app` 后 uiautomator2 的 instrumentation 尚未恢复，单条 `/elements` 会挂到命令超时 | ① `start_app` / `restart_app` 结束后 `_wait_for_package()` 轮询前台包名（≤10s）；② `_find` 每条候选的**单次请求**单独限时 3–8s |
+| 4 | 驱动瞬时返回 `500 Could not proxy command`，重试把一步拖到 182s | 重试无上限 + 单条命令无硬上限 | ① 传输层错误连续 3 次即放弃该定位符（`MAX_TRANSIENT_RETRIES`）；② `_request` 加命令级硬上限（read timeout + 10%，最少 +1s）；③ 执行器给**每一步**加硬上限 `max(30s, timeout_ms×2+30s)`，超时记 `ERROR` 并写明"驱动可能卡死" |
+| 5 | 星财富冷启动弹全屏开屏广告，控件树只剩广告，"自选" 定位不到 | App 产品行为（关闭按钮无可访问性描述） | 非平台缺陷：演示用例第 1 步改为 `start_app`（热启动）；文档标注跑前先关广告 |
+
+> 有了 #3/#4 两道限时后，同类故障的表现为「20 秒内明确报错」，而不是「执行卡住不动」——
+> 这是这次修得最值的一处：**可用的错误信息 > 看起来在跑的假象**。
+
+### 7.9 冻结声明（M4.2）
+
+
+1. 动作契约、`params_schema`、矩阵 28 条、target options 键**均不变**；
+2. 手势统一走 `mobile:` 命令，**不再引入 Appium-Python-Client**（D42 不变）；
+3. `element_list` 返回形状以本批为准（`[{index,text,visible}]`），后续引擎必须跟齐；
+4. `hover` / `select_option` 在 Android 上**明确不支持**，不得写成"静默成功"；
+5. **任一步都必须在有限时间内结束**：适配器层（命令硬上限 + 瞬时错误限次 + 单次请求限时）与执行器层（单步硬上限）**两道保险都不许移除** —— 去掉任何一道，都会回到"执行永远 RUNNING"；
+6. `start_app` / `restart_app` 结束后必须等前台包名匹配（`_wait_for_package`），否则第一个动作会撞上 instrumentation 抖动；
+7. 不做：多设备并行、App 安装/卸载、视频/trace、WebView 内部元素（GAP-47）、开屏广告自动关闭（产品行为，GAP-48）。
+
+---
+
 ## 变更记录
 
 | # | 日期 | 条目 | 依据 |
 |---|---|---|---|
 | 1 | 2026-11-08 | v1.0：M4.1 平台侧 + AppiumAdapter 12 动作 + 用例固化方案；D42 async httpx | 真机 spike（PJA110/Android 16）；D1a；用户要求"先平台侧、再固化" |
 | 2 | 2026-11-08 | v1.1 实现落地：已知 12/28 动作；Activity 全限定名走 `activate_app`；`audit_status.py` 改为按注册表动态加载适配器；真机用例 #125/#126 连续 PASSED、fallback=1 | `pytest` 244 passed + 1 skipped；`audit_status` appium 12/28；平台执行记录 |
+| 3 | 2026-11-08 | v1.2：**M4.2 增补设计**（§7）：16 动作映射、2 条平台不适用、`element_list` 形状对齐、`wait_element` 四态、WebView 上下文边界、方向语义收口 | M4.1 遗留清单；`appium-uiautomator2-driver@4.2.9` 实际命令表（`execute-method-map.js`） |
+| 4 | 2026-11-08 | v1.3 **M4.2 交付**：16 动作 + 2 平台不适用 + `wait_element` 四态 + 元素级截图 + `element_list` 形状对齐；**新增 §7.7 真机结果 / §7.8 五个真机坑与加固**（手势内缩、旋转错误映射、前台等待、瞬时错误限次、命令/单步硬上限）；演示用例改热启动避开开屏广告 | `pytest` 273 passed + 1 skipped；`audit_status` appium 28/28（2 平台不适用）；真机 #133/#140 15/15、#134/#141 9/9、M4.1 回归 #139 5/5 |
