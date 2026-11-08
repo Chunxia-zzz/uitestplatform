@@ -65,8 +65,8 @@ ENGINES: dict[str, EngineMeta] = {
         EngineKey.PLAYWRIGHT, "Playwright", frozenset({Platform.WEB}), True,
         "app.engines.adapters.playwright_adapter:PlaywrightAdapter"),
     EngineKey.APPIUM: EngineMeta(
-        EngineKey.APPIUM, "Appium", frozenset({Platform.ANDROID, Platform.IOS}), False,
-        "app.engines.adapters.stub_adapter:AppiumAdapter"),
+        EngineKey.APPIUM, "Appium", frozenset({Platform.ANDROID, Platform.IOS}), True,
+        "app.engines.adapters.appium_adapter:AppiumAdapter"),
     EngineKey.UIAUTOMATOR2: EngineMeta(
         EngineKey.UIAUTOMATOR2, "uiautomator2", frozenset({Platform.ANDROID}), False,
         "app.engines.adapters.stub_adapter:UIAutomator2Adapter"),

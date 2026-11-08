@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import importlib
 import sys
 from pathlib import Path
 
@@ -21,15 +22,16 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.domain.action_keys import ACTION_BY_KEY, BUILTIN_ACTION_KEYS  # noqa: E402
 from app.domain.capabilities import CAPABILITY_MATRIX, ENGINES  # noqa: E402
 from app.engines.actions import BUILTIN_SPECS  # noqa: E402
-from app.engines.adapters.playwright_adapter import PlaywrightAdapter  # noqa: E402
-from app.engines.adapters.stub_adapter import AppiumAdapter, UIAutomator2Adapter  # noqa: E402
 from app.engines.base import EngineAdapter  # noqa: E402
 
-ADAPTERS = {
-    "playwright": PlaywrightAdapter,
-    "appium": AppiumAdapter,
-    "uiautomator2": UIAutomator2Adapter,
-}
+
+def _load_adapter(adapter_path: str):
+    """按注册表的 adapter_path 动态加载，避免脚本硬编码桩类（M4.1 修正）。"""
+    module_path, _, attr = adapter_path.partition(":")
+    return getattr(importlib.import_module(module_path), attr)
+
+
+ADAPTERS = {key: _load_adapter(meta.adapter_path) for key, meta in ENGINES.items()}
 
 
 def implemented_keys(cls) -> set[str]:
