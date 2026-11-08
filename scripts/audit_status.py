@@ -1,6 +1,7 @@
 """能力自检：把"声明支持"与"真的实现了"逐条对比。
 
-    python scripts/audit_status.py
+    python scripts/audit_status.py            # 人看：打印全部明细，恒 0 退出
+    python scripts/audit_status.py --check    # CI 用：有任何缺失/签名不符 → 退出码 1
 
 检查四件事：
   1. CAPABILITY_MATRIX 里每个引擎声明的动作，适配器是否真的覆写了（而不是继承基类的 _not_supported）
@@ -10,11 +11,13 @@
 """
 from __future__ import annotations
 
+import argparse
+import importlib
 import inspect
 import os
-import importlib
-import sys
 from pathlib import Path
+import sys
+
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
@@ -87,7 +90,15 @@ def inapplicable_keys(engine: str) -> list[str]:
     return sorted(declared & set(getattr(cls, "PLATFORM_INAPPLICABLE", {})))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="引擎能力自检（声明 vs 实现）")
+    parser.add_argument(
+        "--check", action="store_true",
+        help="CI 模式：任何缺失动作 / 签名不符 / 内建 handler 缺失 → 退出码 1",
+    )
+    args = parser.parse_args(argv)
+
+    problems = 0
     print("=" * 78)
     print("引擎能力自检（声明 vs 实现）")
     print("=" * 78)
@@ -99,9 +110,14 @@ def main() -> int:
         print(f"\n[{engine}] 声明 {total} 个动作 · 真实现 {len(done)} · 仅继承默认 {len(missing)}"
               f"{extra} · implemented={meta.implemented}")
         if missing:
-            print("  未覆写（运行时会抛 NotImplementedError）:")
+            # implemented=False 的引擎本来就允许缺（桩），不算失败；只对"声明已实现"的引擎报警
+            if meta.implemented:
+                problems += len(missing)
+            print("  未覆写（运行时会抛 NotImplementedError）:"
+                  + ("" if meta.implemented else "（implemented=False，属预期）"))
             print("   ", ", ".join(missing))
         if sig_bad:
+            problems += len(sig_bad)
             print("  签名不符合 FR4:")
             for item in sig_bad:
                 print("   ", item)
@@ -112,6 +128,7 @@ def main() -> int:
     print("平台内建动作")
     print("=" * 78)
     missing_builtin = sorted(set(BUILTIN_ACTION_KEYS) - set(BUILTIN_SPECS))
+    problems += len(missing_builtin)
     print(f"字典声明 {len(BUILTIN_ACTION_KEYS)} 个 · 有 handler {len(BUILTIN_SPECS)} 个"
           f" · 缺失 {missing_builtin or '无'}")
     for key in sorted(BUILTIN_SPECS):
@@ -144,6 +161,11 @@ def main() -> int:
         print(f"  app/{sub:<14}{count} 个 .py")
     tests = len(list((ROOT / "backend" / "tests").rglob("test_*.py")))
     print(f"  tests/         {tests} 个测试文件")
+
+    if args.check:
+        verdict = "ok" if problems == 0 else f"failed（{problems} 处）"
+        print(f"\nCHECK: {verdict}")
+        return 0 if problems == 0 else 1
     return 0
 
 

@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import html
 import json
 import os
@@ -31,10 +32,12 @@ def _style() -> str:
     h1{font-size:20px;margin:0 0 4px}
     .sub{color:#6b7280;font-size:13px;margin-bottom:18px}
     .cards{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
-    .card{background:#fff;border:1px solid #e3e6ea;border-radius:10px;padding:12px 16px;min-width:110px}
+    .card{background:#fff;border:1px solid #e3e6ea;border-radius:10px;
+          padding:12px 16px;min-width:110px}
     .card b{display:block;font-size:22px;margin-top:2px}
     .ok{color:#16a34a}.bad{color:#dc2626}.warn{color:#d97706}.muted{color:#6b7280}
-    table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e3e6ea;border-radius:10px}
+    table{width:100%;border-collapse:collapse;background:#fff;
+          border:1px solid #e3e6ea;border-radius:10px}
     th,td{padding:8px 10px;border-bottom:1px solid #eef0f3;text-align:left;font-size:13px}
     th{color:#6b7280;font-weight:600;font-size:12px}
     tr:last-child td{border-bottom:0}
@@ -144,7 +147,8 @@ def render_html(payload: dict) -> str:
                 f'<td>{step["attempt"]}</td>'
                 f'<td>{step["duration_ms"] or 0} ms</td>'
                 f'<td class="mono">{step["used_locator_id"] or "—"}</td>'
-                f'<td class="mono">{step["fallback_index"] if step["fallback_index"] is not None else "—"}</td>'
+                f'<td class="mono">{(step["fallback_index"]
+                                     if step["fallback_index"] is not None else "—")}</td>'
                 f'<td>{html.escape(step["message"] or "")} {shots}</td></tr>')
 
     return f"""<!doctype html>
@@ -203,21 +207,27 @@ async def _upsert(db: AsyncSession, execution_id: int, fmt: str,
     record.summary = summary
 
 
-async def generate(db: AsyncSession, execution_id: int) -> dict:
-    """生成（或覆盖）报告，返回 {'html': path, 'json': path}。"""
-    execution, results, artifacts_by_step, titles = await _load(db, execution_id)
-    payload = build_payload(execution, results, artifacts_by_step, titles)
-
+def _write_reports(html_text: str, payload: dict, execution_id: int) -> tuple[str, str]:
+    """同步写报告文件（报告可达上百 KB，不应阻塞事件循环；调用方用 to_thread 包一层）。"""
     os.makedirs(settings.report_dir, exist_ok=True)
     html_path = os.path.abspath(os.path.join(settings.report_dir,
                                              f"execution-{execution_id}.html"))
     json_path = os.path.abspath(os.path.join(settings.report_dir,
                                              f"execution-{execution_id}.json"))
-
     with open(html_path, "w", encoding="utf-8") as fp:
-        fp.write(render_html(payload))
+        fp.write(html_text)
     with open(json_path, "w", encoding="utf-8") as fp:
         json.dump(payload, fp, ensure_ascii=False, indent=2)
+    return html_path, json_path
+
+
+async def generate(db: AsyncSession, execution_id: int) -> dict:
+    """生成（或覆盖）报告，返回 {'html': path, 'json': path}。"""
+    execution, results, artifacts_by_step, titles = await _load(db, execution_id)
+    payload = build_payload(execution, results, artifacts_by_step, titles)
+
+    html_path, json_path = await asyncio.to_thread(
+        _write_reports, render_html(payload), payload, execution_id)
 
     await _upsert(db, execution_id, "HTML", html_path, payload["summary"])
     await _upsert(db, execution_id, "JSON", json_path, payload["summary"])

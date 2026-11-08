@@ -4,8 +4,14 @@ from __future__ import annotations
 from typing import Any
 
 from app.models import (
-    Element, ElementLocator, Execution, ExecutionStepResult, ExecutionTarget, Project,
-    TestCase, TestStep,
+    Element,
+    ElementLocator,
+    Execution,
+    ExecutionStepResult,
+    ExecutionTarget,
+    Project,
+    TestCase,
+    TestStep,
 )
 
 

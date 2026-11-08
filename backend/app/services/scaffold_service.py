@@ -20,15 +20,25 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import (
-    AppError, ScaffoldElementRequired, ScaffoldElementUnexpected,
-    ScaffoldElementWithoutLocator, ScaffoldEmptyActions, ScaffoldInvalidUrl,
-    ScaffoldProjectConflict, ScaffoldUnknownElementKey, ValidationFailed,
+    AppError,
+    ScaffoldElementRequired,
+    ScaffoldElementUnexpected,
+    ScaffoldElementWithoutLocator,
+    ScaffoldEmptyActions,
+    ScaffoldInvalidUrl,
+    ScaffoldProjectConflict,
+    ScaffoldUnknownElementKey,
+    ValidationFailed,
 )
 from app.engines.registry import registry
 from app.models import Element, ExecutionTarget, Project, TestCase, TestSuite, TestSuiteCase
 from app.schemas.scaffold import ScaffoldRequest
 from app.services import (
-    case_service, element_service, locator_service, project_service, suite_service,
+    case_service,
+    element_service,
+    locator_service,
+    project_service,
+    suite_service,
 )
 
 logger = logging.getLogger(__name__)

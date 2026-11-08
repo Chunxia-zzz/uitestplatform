@@ -1,6 +1,7 @@
 """结构化日志（单行 JSON）与 trace_id 中间件。
 
-M1 §2.8 冻结字段：ts / level / logger / trace_id / execution_id / case_id / step_seq / event / payload。
+M1 §2.8 冻结字段：ts / level / logger / trace_id / execution_id / case_id / step_seq /
+event / payload。
 """
 from __future__ import annotations
 
@@ -75,5 +76,7 @@ class TraceMiddleware(BaseHTTPMiddleware):
         return response
 
 
-def log_event(event: str, payload: dict[str, Any] | None = None, level: int = logging.INFO) -> None:
-    logging.getLogger("app.event").log(level, event, extra={"event": event, "payload": payload or {}})
+def log_event(event: str, payload: dict[str, Any] | None = None,
+              level: int = logging.INFO) -> None:
+    logging.getLogger("app.event").log(
+        level, event, extra={"event": event, "payload": payload or {}})

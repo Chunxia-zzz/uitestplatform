@@ -13,7 +13,11 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import (
-    CaseNotFound, ElementNotFound, StepNotFound, StepSeqDuplicated, ValidationFailed,
+    CaseNotFound,
+    ElementNotFound,
+    StepNotFound,
+    StepSeqDuplicated,
+    ValidationFailed,
 )
 from app.domain.action_keys import ACTION_BY_KEY
 from app.models import Element, TestCase, TestStep

@@ -64,7 +64,7 @@ class SessionManager:
                 self._adapters.pop(key, None)
         self._stack.clear()
 
-    async def __aenter__(self) -> "SessionManager":
+    async def __aenter__(self) -> SessionManager:
         return self
 
     async def __aexit__(self, *exc_info) -> None:

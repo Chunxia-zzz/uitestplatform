@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.schemas.requests import (
-    SuiteCaseOrder, SuiteCasesAdd, SuiteCaseToggle, SuiteCreate, SuiteUpdate,
+    SuiteCaseOrder,
+    SuiteCasesAdd,
+    SuiteCaseToggle,
+    SuiteCreate,
+    SuiteUpdate,
 )
 from app.schemas.serialize import suite_member_to_dict, suite_to_dict
 from app.services import scheduler, suite_service

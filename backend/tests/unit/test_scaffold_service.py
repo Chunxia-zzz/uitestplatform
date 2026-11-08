@@ -11,11 +11,16 @@ import pytest
 from sqlalchemy import func, select
 
 from app.core.errors import (
-    ElementLocatorTypeInvalid, ScaffoldElementRequired, ScaffoldElementUnexpected,
-    ScaffoldElementWithoutLocator, ScaffoldInvalidUrl, ScaffoldProjectConflict,
-    ScaffoldUnknownElementKey, ValidationFailed,
+    ElementLocatorTypeInvalid,
+    ScaffoldElementRequired,
+    ScaffoldElementUnexpected,
+    ScaffoldElementWithoutLocator,
+    ScaffoldInvalidUrl,
+    ScaffoldProjectConflict,
+    ScaffoldUnknownElementKey,
+    ValidationFailed,
 )
-from app.models import Element, Project, TestCase, TestStep, TestSuite
+from app.models import Project, TestCase, TestStep
 from app.schemas.scaffold import ScaffoldRequest
 from app.services import scaffold_service
 
@@ -154,7 +159,6 @@ async def test_recreate_replaces_case(db):
 async def test_reuse_case_with_zero_steps_gets_steps(db):
     """复用一个空用例时应补步骤（否则用例集跑起来是 0 步）。"""
     from app.services import case_service
-    from app.services import project_service
 
     await scaffold_service.run(db, make_spec())
     project = (await db.execute(select(Project))).scalar_one()

@@ -9,7 +9,11 @@ from __future__ import annotations
 import pytest
 
 from app.core.errors import (
-    ElementNotFound, StepNotFound, StepSeqDuplicated, ValidationFailed,
+    CaseNotFound,
+    ElementNotFound,
+    StepNotFound,
+    StepSeqDuplicated,
+    ValidationFailed,
 )
 from app.models import Element, TestCase
 from app.services import case_service
@@ -256,7 +260,7 @@ async def test_delete_step(db, project):
 async def test_delete_case_is_soft(db, project):
     case = await _case(db, project)
     await case_service.delete_case(db, case.id)
-    with pytest.raises(Exception):
+    with pytest.raises(CaseNotFound):
         await case_service.get_case_or_404(db, case.id)
     # 步骤保留，历史执行仍可追溯
     assert case.id is not None

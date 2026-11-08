@@ -2,8 +2,18 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
-    cases, elements, engines, executions, locators, meta, notifications, projects,
-    scaffold, scan, suites, targets,
+    cases,
+    elements,
+    engines,
+    executions,
+    locators,
+    meta,
+    notifications,
+    projects,
+    scaffold,
+    scan,
+    suites,
+    targets,
 )
 
 api_router = APIRouter()

@@ -21,8 +21,8 @@
 |---|---|
 | 里程碑 | **M1 / M2 / M3.1 / M3.2 / M3.3 / M3.4 / M3.5 / M3.6 / M3.7 全部完成**；**M4.1（Android/Appium 平台侧 + 用例固化）与 M4.2（手势/滑动/上下文 + 执行加固）已完成**（11 份施工图） |
 | 规模 | 64 API 操作 · 51 条动作字典 · 13 张表 · 54 个错误码 · 8 个前端页 |
-| 质量基线 | `pytest` **273 passed + 1 skipped**（MySQL 集成按 env 门控）；五份 Web 冒烟 **113 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 27）；**真机验收 24 项**（设置 15 + 计算器 9）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异 |
-| CI | **GitHub Actions 三个 job 全绿**（backend / frontend / e2e），红灯与 `needs` 跳过已实测；`.github/workflows/ci.yml` + 本地同源 `scripts/ci_local.sh`；**无 CD**（D40） |
+| 质量基线 | `pytest` **275 passed + 1 skipped**（MySQL 集成按 env 门控）；`ruff` 全绿（门禁）；五份 Web 冒烟 **113 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 27）；**真机验收 24 项**（设置 15 + 计算器 9）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异 |
+| CI | **GitHub Actions 三个 job 全绿**（backend / frontend / e2e），红灯与 `needs` 跳过已实测；backend 步骤：ruff → pytest → import-linter → `audit_status --check`（声明 vs 实现）→ `compileall scripts` → 全新库 alembic；`.github/workflows/ci.yml` + 本地同源 `scripts/ci_local.sh`；**无 CD**（D40 / D44） |
 | Android | **真机 PJA110（Android 16 / `3149dfe3`）已跑通平台用例**：设置 15/15（#140）、计算器 9/9（#141）、星财富回归 5/5（#139，`fallback_index=1`）；`appium` 覆盖 **28/28 声明动作**（26 个可用 + `hover`/`select_option` 平台不适用） |
 | 验收 | 《docs/验收评估报告.md》结论"可进入验收"；**2026-11-02 已自动复跑全部证据并修 2 处**（/scan 文本列表头与折行、m36 V12 空转）→ 只剩用户手工走查 §5.1 手感项 |
 | 验收前审计 | 已做过两轮：2026-10-20 修 1 个竞态；2026-11-02 修扫描表头 + 修正 V12 验收脚本 |
@@ -95,6 +95,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
 | D23/Q-08 | 进程内队列，不引入 Redis（触发重评条件见 M3 §0.5） | M3 |
 | D29–D39 | target 软删语义 / 通知门控 / trace 默认 on-failure / 诊断两段式等 | M3.6 §1.3 |
 | **D40** | **接入 GitHub Actions CI（只校验不部署）：backend / frontend / e2e 三 job；D26 的「不做 CI」就此收窄为「不做 CD」** | 2026-11-04 用户要求；`.github/workflows/ci.yml` |
+| **D44** | **防漂移三件套进 CI**：① 桩类一律 `Stub*` 前缀（曾与真实现同名，包级导入静默拿到桩）；② `audit_status.py --check` 门禁（矩阵声明了但适配器没覆写 → 红；`implemented=False` 的引擎豁免）；③ `ruff` 门禁 + 测试目录豁免 `ASYNC230/240`；④ 契约测试改走 registry（含「appium 解析到真实现而非桩」回归） | 2026-11-08；M4.2 后一致性审计发现 4 处代码侧问题 |
 | **D41** | **通知渠道单选 `UIP_NOTIFY_CHANNEL=wecom\|feishu`（默认 wecom）；飞书走 interactive 卡片，标题带自定义关键词；不做多渠道并行/管理 UI** | 2026-11-04；M3.7 详细设计；GAP-43 |
 | **D42** | **AppiumAdapter 用 async httpx 直连 Appium REST（`trust_env=False`），不引入同步 Appium-Python-Client；M4.1 只做 Android + 12 个核心动作** | 2026-11-08；M4 详细设计；真机联调实测 |
 | **D43** | **执行必须有限时间结束（M4.2 加固）**：命令硬上限（read timeout + 10%）、瞬时错误限次 3 次、`start_app` 后等前台包名、**执行器单步硬上限 `max(30s, timeout×2+30s)`**；整屏手势从通知栏以下开始 | 2026-11-08；真机遇到「执行永远 RUNNING」，见 M4 §7.8 |

@@ -20,7 +20,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.errors import (
-    CaseNotFound, ExecutionCannotCancel, ExecutionNotFound, QueueFull, ValidationFailed,
+    CaseNotFound,
+    ExecutionCannotCancel,
+    ExecutionNotFound,
+    QueueFull,
+    ValidationFailed,
 )
 from app.domain.action_keys import ACTION_BY_KEY
 from app.domain.diagnostics import resolve_diagnostics
@@ -30,11 +34,11 @@ from app.engines.base import ActionContext, SessionConfig
 from app.engines.registry import registry
 from app.engines.session import SessionManager
 from app.models import Artifact, Execution, ExecutionStepResult, TestCase, TestStep
+from app.services import notify_service
 from app.services.element_service import resolve_chain_for
 from app.services.event_bus import ExecutionEvents
 from app.services.project_service import get_or_404 as get_project
 from app.services.project_service import targets as list_targets
-from app.services import notify_service
 from app.services.report_service import generate as generate_report
 
 logger = logging.getLogger(__name__)
@@ -254,12 +258,11 @@ async def execute(execution_id: int) -> None:
         })
 
 
-async def _register_diagnostics(db: AsyncSession, execution_id: int,
-                                diagnostics_dir: str) -> int:
-    """扫描 ``{artifacts_dir}/exec-{id}`` 目录，登记 trace/video/har 产物。"""
+def _scan_diagnostics_dir(diagnostics_dir: str) -> list[tuple[str, str, int]]:
+    """同步扫描诊断产物目录（目录 IO 不应阻塞事件循环；调用方用 to_thread 包一层）。"""
     specs = (("trace", "*.zip", "TRACE"), ("video", "*.webm", "VIDEO"),
              ("har", "*.har", "HAR"))
-    added = 0
+    found: list[tuple[str, str, int]] = []
     for sub, pattern, kind in specs:
         folder = os.path.join(diagnostics_dir, sub)
         if not os.path.isdir(folder):
@@ -269,12 +272,20 @@ async def _register_diagnostics(db: AsyncSession, execution_id: int,
                 continue
             path = os.path.join(folder, name)
             try:
-                size = os.path.getsize(path)
+                found.append((path, kind, os.path.getsize(path)))
             except OSError:
                 continue
-            db.add(Artifact(execution_id=execution_id, step_result_id=None,
-                            kind=kind, storage="LOCAL", path=path, size_bytes=size))
-            added += 1
+    return found
+
+
+async def _register_diagnostics(db: AsyncSession, execution_id: int,
+                                diagnostics_dir: str) -> int:
+    """扫描 ``{artifacts_dir}/exec-{id}`` 目录，登记 trace/video/har 产物。"""
+    found = await asyncio.to_thread(_scan_diagnostics_dir, diagnostics_dir)
+    for path, kind, size in found:
+        db.add(Artifact(execution_id=execution_id, step_result_id=None,
+                        kind=kind, storage="LOCAL", path=path, size_bytes=size))
+    added = len(found)
     if added:
         await db.commit()
     return added

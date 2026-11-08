@@ -7,9 +7,9 @@ import httpx
 import pytest
 
 from app.core.errors import LocatorNotFoundError, ValidationFailed
-from app.engines.base import ActionContext, Locator, LocatorChain, SessionConfig
 from app.engines.adapters import appium_adapter
 from app.engines.adapters.appium_adapter import AppiumAdapter, translate_locator
+from app.engines.base import ActionContext, Locator, LocatorChain, SessionConfig
 
 
 def _config(**options) -> SessionConfig:
@@ -297,7 +297,7 @@ async def _prepare(mock_transport, handler) -> AppiumAdapter:
 def _gestures(calls) -> list[tuple[str, dict]]:
     """从 /execute/sync 调用里抽出 (mobile: 命令名, 参数)。"""
     out = []
-    for method, path, body in calls:
+    for _method, path, body in calls:
         if path.endswith("/execute/sync"):
             payload = json.loads(body)
             args = payload.get("args") or [{}]

@@ -138,7 +138,7 @@ Linux / macOS 把 `scripts\setup.ps1` 换成 `scripts/setup.sh`，python 路径�
 
 | job | 内容 |
 |---|---|
-| `backend` | `pytest` · `lint-imports` · 全新空库 `alembic upgrade head` + `alembic check` |
+| `backend` | `ruff`（门禁）· `pytest` · `lint-imports` · `audit_status --check`（声明 vs 实现）· `compileall scripts` · 全新空库 `alembic upgrade head` + `alembic check` |
 | `frontend` | `npm ci` · `vue-tsc --noEmit` · `vite build`（node 22 + npm 缓存） |
 | `e2e` | seed-demo → 起后端 8000 + fixture 8899 → `smoke_m3/m32/m34/m35`（真 Chromium）；`needs: backend` |
 

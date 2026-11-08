@@ -8,7 +8,10 @@ from typing import Any
 
 from app.core.errors import EngineNotFound, ProjectPlatformEngineMismatch
 from app.domain.capabilities import (
-    CAPABILITY_MATRIX, ENGINES, EngineMeta, assert_engine_platform_consistency,
+    CAPABILITY_MATRIX,
+    ENGINES,
+    EngineMeta,
+    assert_engine_platform_consistency,
 )
 from app.domain.enums import PLATFORM_ENGINES
 from app.engines.base import EngineAdapter

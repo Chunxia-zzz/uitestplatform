@@ -69,7 +69,7 @@ ENGINES: dict[str, EngineMeta] = {
         "app.engines.adapters.appium_adapter:AppiumAdapter"),
     EngineKey.UIAUTOMATOR2: EngineMeta(
         EngineKey.UIAUTOMATOR2, "uiautomator2", frozenset({Platform.ANDROID}), False,
-        "app.engines.adapters.stub_adapter:UIAutomator2Adapter"),
+        "app.engines.adapters.stub_adapter:StubUIAutomator2Adapter"),
 }
 
 

@@ -24,7 +24,7 @@ def test_assert_depth_limit():
     tree_service.assert_depth("/1/2/3/4/5/6/7/8/", max_depth=8)
     with pytest.raises(Exception) as exc:
         tree_service.assert_depth("/1/2/3/4/5/6/7/8/9/", max_depth=8)
-    assert "ELEMENT_DEPTH_EXCEEDED" == getattr(exc.value, "code")
+    assert "ELEMENT_DEPTH_EXCEEDED" == exc.value.code
 
 
 def test_cycle_detection_uses_prefix_not_substring():

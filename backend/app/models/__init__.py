@@ -14,8 +14,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.domain.enums import (
-    ActionCategory, ExecutionStatus, LocatorStatus, NodeType, OnFailure, Platform,
-    StepStatus, TriggerType,
+    ActionCategory,
+    ExecutionStatus,
+    LocatorStatus,
+    NodeType,
+    OnFailure,
+    Platform,
+    StepStatus,
+    TriggerType,
 )
 
 

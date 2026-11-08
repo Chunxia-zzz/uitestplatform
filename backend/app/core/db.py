@@ -47,12 +47,14 @@ async def init_db(*, seed: bool = True) -> dict[str, int]:
     if not seed:
         return counts
 
-    from app.domain.action_keys import ACTION_CATALOG, sort_of
-    from app.models import ActionCatalog
     from sqlalchemy import func, select
 
+    from app.domain.action_keys import ACTION_CATALOG, sort_of
+    from app.models import ActionCatalog
+
     async with SessionLocal() as session:
-        existing = {row[0] for row in (await session.execute(select(ActionCatalog.action_key))).all()}
+        action_rows = await session.execute(select(ActionCatalog.action_key))
+        existing = {row[0] for row in action_rows.all()}
         added = 0
         for spec in ACTION_CATALOG:
             if spec.key in existing:
@@ -70,6 +72,7 @@ async def init_db(*, seed: bool = True) -> dict[str, int]:
             ))
             added += 1
         await session.commit()
-        counts["actions"] = (await session.execute(select(func.count(ActionCatalog.id)))).scalar_one()
+        counts["actions"] = (await session.execute(
+            select(func.count(ActionCatalog.id)))).scalar_one()
         logger.info("action_catalog seeded: +%s (total %s)", added, counts["actions"])
     return counts

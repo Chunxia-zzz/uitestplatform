@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import mimetypes
 import os
 
@@ -18,6 +19,12 @@ from app.schemas.serialize import execution_to_dict
 from app.services import artifact_service, execution_service, report_service
 
 router = APIRouter(tags=["executions"])
+
+
+def _read_text(path: str) -> str:
+    with open(path, encoding="utf-8") as fp:
+        return fp.read()
+
 
 TERMINAL = execution_service.TERMINAL
 
@@ -104,9 +111,8 @@ async def get_report(execution_id: int, format: str = "html", download: bool = F
             raise ReportNotReady("报告生成失败", {"execution_id": execution_id})
 
     if fmt == "json":
-        import json
-        with open(record.path, encoding="utf-8") as fp:
-            return JSONResponse(content=json.load(fp))
+        text = await asyncio.to_thread(_read_text, record.path)
+        return JSONResponse(content=json.loads(text))
     # 默认 inline：报告页要用 iframe 内嵌；加 ?download=1 才是附件下载
     return FileResponse(
         record.path, media_type="text/html; charset=utf-8",

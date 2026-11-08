@@ -82,6 +82,7 @@ async def test_report_contains_retry_and_fallback(db, tmp_path, monkeypatch):
     # 幂等：重复生成不产生重复 report 行
     await report_service.generate(db, execution.id)
     from sqlalchemy import func, select
+
     from app.models import Report
     count = (await db.execute(select(func.count(Report.id))
                               .where(Report.execution_id == execution.id))).scalar_one()
@@ -109,6 +110,7 @@ async def test_regenerate_updates_existing_row(db, tmp_path, monkeypatch):
 
     await report_service.generate(db, execution.id)
     from sqlalchemy import select
+
     from app.models import Report
     rows = list((await db.execute(
         select(Report).where(Report.execution_id == execution.id))).scalars().all())

@@ -17,7 +17,7 @@ async def test_exact_engine_wins_over_wildcard_even_with_larger_priority():
         row(1, "*", 10), row(2, "appium", 100),
     ])
     chain = await LocatorResolver(repo).resolve(101, "ANDROID", "appium")
-    assert [l.locator_id for l in chain.locators] == [2, 1]
+    assert [loc.locator_id for loc in chain.locators] == [2, 1]
 
 
 @pytest.mark.asyncio
@@ -26,14 +26,14 @@ async def test_priority_ascending_within_group():
         row(1, "appium", 100), row(2, "appium", 10), row(3, "appium", 50),
     ])
     chain = await LocatorResolver(repo).resolve(101, "ANDROID", "appium")
-    assert [l.locator_id for l in chain.locators] == [2, 3, 1]
+    assert [loc.locator_id for loc in chain.locators] == [2, 3, 1]
 
 
 @pytest.mark.asyncio
 async def test_tie_broken_by_id_for_stability():
     repo = InMemoryLocatorRepository([row(9, "*", 10), row(4, "*", 10)])
     chain = await LocatorResolver(repo).resolve(101, "ANDROID", "appium")
-    assert [l.locator_id for l in chain.locators] == [4, 9]
+    assert [loc.locator_id for loc in chain.locators] == [4, 9]
 
 
 @pytest.mark.asyncio
@@ -42,7 +42,7 @@ async def test_disabled_rows_are_skipped():
                           locator_type="css", locator_value="x", priority=10, enabled=False)
     repo = InMemoryLocatorRepository([disabled, row(2, "appium", 20)])
     chain = await LocatorResolver(repo).resolve(101, "ANDROID", "appium")
-    assert [l.locator_id for l in chain.locators] == [2]
+    assert [loc.locator_id for loc in chain.locators] == [2]
 
 
 @pytest.mark.asyncio

@@ -7,8 +7,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import (
-    ElementFolderNotEmpty, ElementNameDuplicated, ElementNodeTypeConflict,
-    ElementNotFound, ElementReferenced,
+    ElementFolderNotEmpty,
+    ElementNameDuplicated,
+    ElementNodeTypeConflict,
+    ElementNotFound,
+    ElementReferenced,
 )
 from app.models import Element, ElementLocator, TestStep
 from app.repositories.element_repo import element_repo

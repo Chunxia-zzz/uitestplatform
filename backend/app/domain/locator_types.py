@@ -2,7 +2,8 @@
 
 分层约束（冻结项 FR18 / M2 §2.5）：
 
-1. 只表达**语义**，绝不出现引擎语汇（``-android uiautomator`` / ``resourceId=`` / ``-ios predicate string``）。
+1. 只表达**语义**，绝不出现引擎语汇
+   （``-android uiautomator`` / ``resourceId=`` / ``-ios predicate string``）。
    同一个 resource-id 是**一条业务事实**，由适配器翻译成各引擎的写法。
 2. ``engines`` 声明"哪些引擎能翻译这个语义" → 写入期做引擎维度校验。
 3. 本模块零业务依赖（RL-M2-2），可被 registry / services / api 三方引用。

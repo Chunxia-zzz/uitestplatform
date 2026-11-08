@@ -16,7 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.errors import (
-    ProjectNotFound, ScanEmptyCandidates, ScanImportEmpty, ScanTargetRequired,
+    ProjectNotFound,
+    ScanEmptyCandidates,
+    ScanImportEmpty,
+    ScanTargetRequired,
     ValidationFailed,
 )
 from app.domain.scan import build_candidates
@@ -92,7 +95,7 @@ async def scan(db: AsyncSession, project_id: int, req: ScanRequest) -> dict:
                 return raw or []
 
             raw = await asyncio.wait_for(_run(), timeout=settings.verify_total_timeout_s)
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise ScanEmptyCandidates(
                 f"扫描超时（>{settings.verify_total_timeout_s}s），当前阶段：{stage}",
                 {"stage": stage}) from exc
@@ -145,9 +148,9 @@ async def import_candidates(db: AsyncSession, project_id: int,
                     db, element.id,
                     [{"platform": str(project.platform),
                       "engine_key": project.engine_key,
-                      "locator_type": l.locator_type,
-                      "locator_value": l.locator_value}
-                     for l in candidate.locators])
+                      "locator_type": loc.locator_type,
+                      "locator_value": loc.locator_value}
+                     for loc in candidate.locators])
                 locator_ids = result["created"]
                 if result["failed"]:
                     failed.append({

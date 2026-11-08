@@ -21,11 +21,20 @@ ALEMBIC="$BIN/alembic"
 if [ -x "$BIN/lint-imports.exe" ]; then LINT="$BIN/lint-imports.exe"; fi
 if [ -x "$BIN/alembic.exe" ]; then ALEMBIC="$BIN/alembic.exe"; fi
 
+echo "== backend: ruff =="
+( cd backend && "$PY" -m ruff check app tests )
+
 echo "== backend: pytest =="
 ( cd backend && "$PY" -m pytest -q )
 
 echo "== backend: import-linter =="
 ( cd backend && "$LINT" )
+
+echo "== backend: capability audit =="
+"$PY" scripts/audit_status.py --check >/dev/null && echo "capability audit: ok"
+
+echo "== backend: scripts syntax =="
+"$PY" -m compileall -q scripts
 
 echo "== backend: alembic fresh-db check =="
 (

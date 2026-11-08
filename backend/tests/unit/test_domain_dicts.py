@@ -7,7 +7,10 @@ from app.domain.action_keys import ACTION_BY_KEY, ACTION_CATALOG, BUILTIN_ACTION
 from app.domain.capabilities import CAPABILITY_MATRIX, ENGINES, assert_engine_platform_consistency
 from app.domain.enums import PLATFORM_ENGINES
 from app.domain.locator_types import (
-    FORBIDDEN_TYPE_TOKENS, LOCATOR_TYPES, default_priority, get_spec,
+    FORBIDDEN_TYPE_TOKENS,
+    LOCATOR_TYPES,
+    default_priority,
+    get_spec,
 )
 
 

@@ -22,7 +22,10 @@ from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.db import SessionLocal, engine, init_db
 from app.core.errors import (
-    AppError, app_error_handler, http_exception_handler, unhandled_error_handler,
+    AppError,
+    app_error_handler,
+    http_exception_handler,
+    unhandled_error_handler,
     validation_error_handler,
 )
 from app.core.logging import TraceMiddleware, setup_logging

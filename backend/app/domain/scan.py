@@ -58,9 +58,9 @@ class Candidate:
             "key": self.key, "tag": self.tag, "name": self.name, "text": self.text,
             "strength": self.strength,
             "locators": [
-                {"locator_type": l.locator_type, "locator_value": l.locator_value,
-                 "primary": l.primary}
-                for l in self.locators
+                {"locator_type": loc.locator_type, "locator_value": loc.locator_value,
+                 "primary": loc.primary}
+                for loc in self.locators
             ],
         }
 

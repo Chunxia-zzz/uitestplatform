@@ -4,7 +4,10 @@ from __future__ import annotations
 import pytest
 
 from app.core.errors import (
-    SuiteCronInvalid, SuiteEmpty, SuiteMemberNotFound, SuiteNameDuplicated,
+    SuiteCronInvalid,
+    SuiteEmpty,
+    SuiteMemberNotFound,
+    SuiteNameDuplicated,
     ValidationFailed,
 )
 from app.models import Project, TestCase

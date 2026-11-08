@@ -39,7 +39,7 @@ class LocatorChain:
     locators: tuple[Locator, ...] = ()
 
     @classmethod
-    def of(cls, element_id: int, locators) -> "LocatorChain":
+    def of(cls, element_id: int, locators) -> LocatorChain:
         items = tuple(locators)
         assert all(isinstance(x, Locator) for x in items), "LocatorChain 只能装 Locator"
         return cls(element_id, items)
@@ -76,7 +76,7 @@ class ActionContext:
     variables: dict[str, Any] = field(default_factory=dict)
     log: Callable[[str, dict], None] | None = None
     #: 供 drag 之类"双元素动作"使用：执行器预先解析好的目标元素链
-    resolved_chains: dict[int, "LocatorChain"] = field(default_factory=dict)
+    resolved_chains: dict[int, LocatorChain] = field(default_factory=dict)
     #: 适配器产生的产物（只记路径事实，落库由执行器负责 —— FR34）
     artifacts: list[dict[str, Any]] = field(default_factory=list)
 

@@ -42,11 +42,25 @@ jobs:
       - name: install deps
         run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
 
+      - name: ruff (lint gate)
+        run: python -m ruff check app tests
+
       - name: pytest
         run: python -m pytest -q
 
       - name: layering red line (import-linter)
         run: lint-imports
+
+      # 声明 vs 实现：任何"矩阵声明了但适配器没覆写"的动作都会让这里红
+      # （M4.2 那类漂移只有这条能抓；--check 缺一项即退出码 1）
+      - name: capability audit (declared vs implemented)
+        env:
+          UIP_DATABASE_URL: sqlite+aiosqlite:///./data/ci.db
+        run: python ../scripts/audit_status.py --check
+
+      # 冒烟脚本是 CI 资产，语法错误不该等到运行时才暴露
+      - name: scripts syntax check
+        run: python -m compileall -q ../scripts
 
       # 全新库从 0 跑迁移，再比对 ORM 与迁移是否一致（GAP-33 的 CI 化）。
       - name: alembic fresh-db check

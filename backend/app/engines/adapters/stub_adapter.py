@@ -1,17 +1,21 @@
-"""Appium / uiautomator2 桩适配器（D3：一期只留接口与注册位，不实现）。
+"""桩适配器（D3：一期只留接口与注册位，不实现）。
+
+**命名约定**：桩类一律 ``Stub*`` 前缀（``StubAppiumAdapter`` / ``StubUIAutomator2Adapter``），
+不得与真实现同名 —— 曾经两者都叫 ``AppiumAdapter``，包级导入会静默拿到桩（2026-11-08 修正）。
+真实现：``appium_adapter.py``（Android 26 动作）。
 
 语义分界（FR15）：
-* 这里抛 ``NotImplementedError`` —— "该引擎应支持、但 M4 才实现"
+* 这里抛 ``NotImplementedError`` —— "该引擎应支持、但还没实现"
 * 基类 ``_not_supported`` 抛 ``UnsupportedActionError`` —— "该引擎本来就不支持"
 
-两者混用会让 M4 的工作量彻底失去可追踪性。
+两者混用会让剩余工作量彻底失去可追踪性。
 """
 from __future__ import annotations
 
 from app.domain.enums import Platform
 from app.engines.base import EngineAdapter, SessionConfig
 
-_HINT = "M4 计划：见 docs/UI自动化平台移动端对接方案.md"
+_HINT = "待实现：uiautomator2 计划 M4.3；Appium 已于 M4.1/M4.2 交付（见 appium_adapter.py）"
 
 
 class _StubBase(EngineAdapter):
@@ -59,11 +63,11 @@ class _StubBase(EngineAdapter):
         self._todo("screenshot")
 
 
-class AppiumAdapter(_StubBase):
+class StubAppiumAdapter(_StubBase):
     key = "appium"
     platforms = frozenset({Platform.ANDROID, Platform.IOS})
 
 
-class UIAutomator2Adapter(_StubBase):
+class StubUIAutomator2Adapter(_StubBase):
     key = "uiautomator2"
     platforms = frozenset({Platform.ANDROID})

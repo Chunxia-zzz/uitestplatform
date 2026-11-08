@@ -5,8 +5,8 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.core.db import Base
 from app import models  # noqa: F401  注册全部表
+from app.core.db import Base
 
 
 @pytest.fixture(autouse=True)

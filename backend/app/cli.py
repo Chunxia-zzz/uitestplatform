@@ -21,7 +21,8 @@ from app.models import ActionCatalog
 async def _doctor() -> int:
     await init_db(seed=True)
     async with SessionLocal() as session:
-        rows = (await session.execute(select(ActionCatalog.action_key, ActionCatalog.engines))).all()
+        rows = (await session.execute(
+            select(ActionCatalog.action_key, ActionCatalog.engines))).all()
     assert_catalog_consistency([(k, list(v or [])) for k, v in rows])
     assert_locator_dict_consistency()
     print(f"OK: action_catalog={len(rows)} actions")

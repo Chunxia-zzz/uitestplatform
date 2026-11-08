@@ -1,7 +1,16 @@
 from app.engines.base import (
-    ActionContext, EngineAdapter, Locator, LocatorChain, LocatorProbe, SessionConfig,
+    ActionContext,
+    EngineAdapter,
+    Locator,
+    LocatorChain,
+    LocatorProbe,
+    SessionConfig,
 )
-from app.engines.registry import assert_catalog_consistency, assert_locator_dict_consistency, registry
+from app.engines.registry import (
+    assert_catalog_consistency,
+    assert_locator_dict_consistency,
+    registry,
+)
 
 __all__ = [
     "ActionContext", "EngineAdapter", "Locator", "LocatorChain", "LocatorProbe",

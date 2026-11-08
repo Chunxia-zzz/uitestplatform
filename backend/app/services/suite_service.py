@@ -12,8 +12,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import (
-    ProjectNotFound, SuiteCronInvalid, SuiteEmpty, SuiteMemberNotFound,
-    SuiteNameDuplicated, SuiteNotFound, ValidationFailed,
+    ProjectNotFound,
+    SuiteCronInvalid,
+    SuiteEmpty,
+    SuiteMemberNotFound,
+    SuiteNameDuplicated,
+    SuiteNotFound,
+    ValidationFailed,
 )
 from app.models import Project, TestCase, TestSuite, TestSuiteCase
 from app.services import tree_service

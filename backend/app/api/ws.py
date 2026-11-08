@@ -26,11 +26,12 @@ async def execution_stream(websocket: WebSocket, execution_id: int) -> None:
     await websocket.accept()
     queue = bus.subscribe(execution_id)
     try:
-        await websocket.send_json({"event": "subscribed", "payload": {"execution_id": execution_id}})
+        await websocket.send_json(
+            {"event": "subscribed", "payload": {"execution_id": execution_id}})
         while True:
             try:
                 message = await asyncio.wait_for(queue.get(), timeout=_IDLE_TIMEOUT_S)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await websocket.send_json({"event": "ping", "payload": {}})
                 continue
             await websocket.send_json(message)

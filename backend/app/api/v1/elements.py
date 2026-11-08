@@ -90,7 +90,8 @@ async def reorder_children(element_id: int, body: OrderUpdate,
 @router.get("/elements/{element_id}/references")
 async def element_references(element_id: int, db: AsyncSession = Depends(get_session)):
     await element_service.get_or_404(db, element_id)
-    return {"element_id": element_id, "references": await element_service.references(db, element_id)}
+    return {"element_id": element_id,
+            "references": await element_service.references(db, element_id)}
 
 
 @router.post("/elements/{element_id}/duplicate", status_code=201)

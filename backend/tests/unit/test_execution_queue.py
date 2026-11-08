@@ -48,4 +48,4 @@ async def test_queue_full_raises(monkeypatch):
     await queue.submit(1)
     with pytest.raises(Exception) as exc:
         await queue.submit(2)
-    assert getattr(exc.value, "code") == "QUEUE_FULL"
+    assert exc.value.code == "QUEUE_FULL"

@@ -4,8 +4,11 @@ from __future__ import annotations
 import pytest
 
 from app.core.errors import (
-    ElementFolderNotEmpty, ElementNameDuplicated, ElementOrderIncomplete,
-    ElementParentMustBeFolder, ElementReferenced,
+    ElementFolderNotEmpty,
+    ElementNameDuplicated,
+    ElementOrderIncomplete,
+    ElementParentMustBeFolder,
+    ElementReferenced,
 )
 from app.services import element_service
 

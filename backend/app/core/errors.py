@@ -228,7 +228,9 @@ class ScanTargetRequired(AppError):
 
 
 class ScanEmptyCandidates(AppError):
-    code, http_status, message = "SCAN_EMPTY_CANDIDATES", 422, "扫描结果为空（页面不可访问或无可见元素）"
+    code, http_status, message = (
+        "SCAN_EMPTY_CANDIDATES", 422,
+        "扫描结果为空（页面不可访问或无可见元素）")
 
 
 class ScanImportEmpty(AppError):
@@ -254,8 +256,9 @@ class TargetNameDuplicated(AppError):
 
 # ─────────────────────── 通知（M3.6 GAP-20）──────────────────────
 class NotifyNotConfigured(AppError):
-    code, http_status, message = ("NOTIFY_NOT_CONFIGURED", 422,
-                                  "当前通知渠道未配置 webhook（检查 UIP_NOTIFY_CHANNEL 与对应 webhook）")
+    code, http_status, message = (
+        "NOTIFY_NOT_CONFIGURED", 422,
+        "当前通知渠道未配置 webhook（检查 UIP_NOTIFY_CHANNEL 与对应 webhook）")
 
 
 class NotifySendFailed(AppError):

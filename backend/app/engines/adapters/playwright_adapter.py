@@ -9,16 +9,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import time
 from datetime import datetime
 from typing import Any
 
 from app.core.config import settings
-from app.engines.base import (
-    ActionContext, EngineAdapter, Locator, LocatorChain, LocatorProbe, SessionConfig,
-)
 from app.domain.enums import Platform
+from app.engines.base import (
+    ActionContext,
+    EngineAdapter,
+    Locator,
+    LocatorChain,
+    LocatorProbe,
+    SessionConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +76,8 @@ class PlaywrightAdapter(EngineAdapter):
         # 路径不存在时**不能让 Playwright 报错**（首次运行本来就没有），只告警并跳过。
         storage_state = options.pop("storage_state", None)
         if storage_state:
-            if isinstance(storage_state, str) and not os.path.isfile(storage_state):
+            if isinstance(storage_state, str) and not await asyncio.to_thread(
+                    os.path.isfile, storage_state):
                 logger.warning("storage_state 文件不存在，按未登录状态启动：%s", storage_state)
             else:
                 context_opts["storage_state"] = storage_state
@@ -125,8 +130,10 @@ class PlaywrightAdapter(EngineAdapter):
         # GAP-06：先保存登录态，再关 context —— 关掉之后就拿不到 storage_state 了
         if self._save_storage_state and self._context is not None:
             try:
-                target = os.path.abspath(self._save_storage_state)
-                os.makedirs(os.path.dirname(target), exist_ok=True)
+                target = await asyncio.to_thread(
+                    os.path.abspath, self._save_storage_state)
+                await asyncio.to_thread(
+                    os.makedirs, os.path.dirname(target), exist_ok=True)
                 await self._context.storage_state(path=target)
             except Exception:
                 logger.warning("保存 storage_state 失败：%s", self._save_storage_state,
@@ -303,8 +310,9 @@ class PlaywrightAdapter(EngineAdapter):
             raise ValueError(f"未知截图目标：{target}（只支持 page / element）")
 
         # FR34：只登记"路径事实"，落库由执行器负责（适配器不依赖 DB）
+        size_bytes = await asyncio.to_thread(os.path.getsize, target_path)
         ctx.artifacts.append({"kind": "SCREENSHOT", "path": target_path,
-                              "size_bytes": os.path.getsize(target_path)})
+                              "size_bytes": size_bytes})
         return target_path
 
     async def probe_locator(self, chain, ctx, **_) -> LocatorProbe:
@@ -336,7 +344,8 @@ class PlaywrightAdapter(EngineAdapter):
         limit = max(50, max_elements * 4)
         script = """
         (limit) => {
-          const SKIP = new Set(['SCRIPT','STYLE','META','LINK','HEAD','TITLE','NOSCRIPT','TEMPLATE','BR'])
+          const SKIP = new Set(['SCRIPT','STYLE','META','LINK','HEAD',
+                                'TITLE','NOSCRIPT','TEMPLATE','BR'])
           const out = []
           for (const el of document.querySelectorAll('body *')) {
             if (SKIP.has(el.tagName)) continue

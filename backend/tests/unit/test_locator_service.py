@@ -4,8 +4,12 @@ from __future__ import annotations
 import pytest
 
 from app.core.errors import (
-    ElementFolderHasNoLocator, ElementLocatorDuplicated, ElementLocatorTypeEngineUnsupported,
-    ElementLocatorTypeInvalid, ElementLocatorWildcardUnscoped, ProjectPlatformEngineMismatch,
+    ElementFolderHasNoLocator,
+    ElementLocatorDuplicated,
+    ElementLocatorTypeEngineUnsupported,
+    ElementLocatorTypeInvalid,
+    ElementLocatorWildcardUnscoped,
+    ProjectPlatformEngineMismatch,
 )
 from app.domain.enums import LocatorStatus
 from app.services import element_service, locator_service

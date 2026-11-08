@@ -4,8 +4,12 @@ from __future__ import annotations
 import pytest
 
 from app.core.errors import (
-    EngineNotFound, ProjectNotFound, ProjectPlatformEngineMismatch,
-    TargetNameDuplicated, TargetNotFound, ValidationFailed,
+    EngineNotFound,
+    ProjectNotFound,
+    ProjectPlatformEngineMismatch,
+    TargetNameDuplicated,
+    TargetNotFound,
+    ValidationFailed,
 )
 from app.models import Project
 from app.services import project_service, target_service

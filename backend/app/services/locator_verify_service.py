@@ -22,17 +22,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.errors import (
-    BatchLimitExceeded, ElementNotFound, LocatorVerifyTargetRequired, LocatorVerifyTimeout,
-    ProjectNotFound, ValidationFailed,
+    BatchLimitExceeded,
+    LocatorVerifyTargetRequired,
+    LocatorVerifyTimeout,
+    ProjectNotFound,
+    ValidationFailed,
 )
 from app.domain.enums import VerifySummary, VerifyVerdict
 from app.engines.base import ActionContext, Locator, LocatorChain, SessionConfig
 from app.engines.registry import registry
 from app.engines.session import SessionManager
 from app.models import ExecutionTarget, Project
+from app.repositories.locator_repo import locator_repo
 from app.services.element_service import get_or_404
 from app.services.locator_service import mark_verified
-from app.repositories.locator_repo import locator_repo
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +152,7 @@ async def verify(db: AsyncSession, element_id: int, *, platform: str, engine_key
                     })
 
             await asyncio.wait_for(_run(), timeout=settings.verify_total_timeout_s)
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise LocatorVerifyTimeout(
                 f"验证超时（>{settings.verify_total_timeout_s}s），当前阶段：{stage}",
                 {"stage": stage, "timeout_s": settings.verify_total_timeout_s},

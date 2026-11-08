@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from app.core.errors import ScanImportEmpty, ScanTargetRequired
-from app.domain.scan import Candidate, build_candidates, should_include
+from app.domain.scan import build_candidates, should_include
 from app.models import Project
 from app.schemas.scan import ScanImportRequest, ScanRequest
 from app.services import scan_service

@@ -131,6 +131,14 @@ def _clamp_percent(value: Any) -> float:
     return round(max(0.05, min(0.95, percent)), 3)
 
 
+def _save_bytes(data: bytes, path: str) -> int:
+    """同步落盘（截图写文件不应阻塞事件循环；调用方用 to_thread 包一层）。"""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "wb") as fh:
+        fh.write(data)
+    return os.path.getsize(path)
+
+
 #: 驱动传输层瞬时错误的特征串（App 启动瞬间 / uiautomator2 server 重启时高频出现）。
 #: 这类错误重试有意义，但**必须限次** —— 真机上每次要 3 秒，无限重试会把一步拖到分钟级。
 _TRANSIENT_MARKERS = (
@@ -282,7 +290,7 @@ class AppiumAdapter(EngineAdapter):
     # ───────────────────────── HTTP 基础 ─────────────────────────
     async def _request(self, method: str, path: str, *,
                        json_body: dict | None = None,
-                       timeout: httpx.Timeout | float | None = None) -> Any:
+                       timeout: httpx.Timeout | float | None = None) -> Any:  # noqa: ASYNC109
         if self._client is None:
             raise RuntimeError("Appium 客户端尚未初始化")
         # 命令级硬上限：httpx 的 read timeout 挡不住"慢速滴流"响应，这里再兜一层
@@ -311,7 +319,7 @@ class AppiumAdapter(EngineAdapter):
 
     async def _cmd(self, method: str, path: str, *,
                    json_body: dict | None = None,
-                   timeout: httpx.Timeout | float | None = None) -> Any:
+                   timeout: httpx.Timeout | float | None = None) -> Any:  # noqa: ASYNC109
         if not self._session_id:
             raise RuntimeError("Appium 会话未建立")
         return await self._request(
@@ -663,14 +671,13 @@ class AppiumAdapter(EngineAdapter):
                 "GET", f"/element/{self._element_id(element)}/screenshot")
         else:
             b64 = await self._cmd("GET", "/screenshot")
-        os.makedirs(settings.artifacts_dir, exist_ok=True)
         target_path = path or os.path.join(
             settings.artifacts_dir,
             f"shot-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.png")
-        with open(target_path, "wb") as fh:
-            fh.write(base64.b64decode(str(b64)))
+        size_bytes = await asyncio.to_thread(
+            _save_bytes, base64.b64decode(str(b64)), target_path)
         ctx.artifacts.append({"kind": "SCREENSHOT", "path": target_path,
-                              "size_bytes": os.path.getsize(target_path)})
+                              "size_bytes": size_bytes})
         return target_path
 
     # ─────────────────────── App 生命周期 ───────────────────────

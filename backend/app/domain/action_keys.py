@@ -120,7 +120,8 @@ _ACTIONS: list[ActionDef] = [
               {"url": _s("绝对或相对 target.base_url"),
                "wait_until": {"type": "string",
                               "enum": ["commit", "domcontentloaded", "load", "networkidle"],
-                              "description": "页面就绪条件；默认 domcontentloaded（GAP-11 / M3.4）"}},
+                              "description": "页面就绪条件；默认 domcontentloaded"
+                                             "（GAP-11 / M3.4）"}},
               ("url",),
               note="SPA 建议 wait_until=load 或 networkidle"),
     ActionDef("go_back", "后退", "NAVIGATION", WEB, PW, False),

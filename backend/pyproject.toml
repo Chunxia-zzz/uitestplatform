@@ -39,6 +39,10 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 ignore = ["B008"]           # FastAPI Depends 惯用法
 
+[tool.ruff.lint.per-file-ignores]
+# 测试里直接写/读临时文件是惯用法（tmp_path + 内容断言），不为它包 to_thread
+"tests/**" = ["ASYNC230", "ASYNC240"]
+
 [tool.importlinter]
 root_packages = ["app"]
 

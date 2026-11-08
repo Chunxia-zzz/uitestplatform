@@ -8,11 +8,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import (
-    ProjectNotFound, TargetNameDuplicated, TargetNotFound, ValidationFailed,
+    ProjectNotFound,
+    TargetNameDuplicated,
+    TargetNotFound,
+    ValidationFailed,
 )
 from app.engines.registry import registry
 from app.models import ExecutionTarget, Project
