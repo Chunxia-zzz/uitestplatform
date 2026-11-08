@@ -22,16 +22,16 @@
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| **M4.1（本批）** | AppiumAdapter 12 个核心动作 + Android 定位映射 + target options 契约 + 用例固化 demo + 真机验收 | 本批交付 |
-| M4.2 | 剩余动作：`long_press` / `double_click` / `drag` / `coordinate_click` / `element_scroll` / `page_swipe` / `multi_finger_swipe` / `swipe_up/down` / `scroll_to_element` / `element_list` / `background_foreground` / `fix_orientation` / `get_contexts` / `switch_to_context` | 后续 |
+| **M4.1** | AppiumAdapter 12 个核心动作 + Android 定位映射 + target options 契约 + 用例固化 demo + 真机验收 | ✅ 已完成（2026-11-08，见 §2–§5） |
+| **M4.2** | 剩余 16 个动作（手势 / 滑动 / 上下文 / 生命周期）+ `wait_element` 四态 + 元素级截图 + 执行链路加固（上表清单 + `element_list` 形状对齐） | ✅ 已完成（2026-11-08，见 §7） |
 | M4.3 | iOS（macOS/云真机）、uiautomator2 引擎、多设备租约与并发 | 后续 |
 | 不做（本批） | 前端设备管理页、视频/trace、设备农场、CD | — |
 
 ### 1.3 非目标（明确不做）
 
 - 不做设备池/租约：M4.1 一个 target 对应一台设备，执行串行；并发上限仍由队列 Semaphore 控制。
-- 不做 App 安装/卸载：`app_package` 必须已安装在设备上；APK 安装留到 M4.2。
-- 不做 WebView：`get_contexts/switch_to_context` 归 M4.2。
+- 不做 App 安装/卸载：`app_package` 必须已安装在设备上；APK 安装仍未排期（M4.2 也未做）。
+- 不做 WebView **内部元素**：`get_contexts/switch_to_context` 已在 M4.2 实现（可列上下文、可切、可切回）；切进 `WEBVIEW_*` 后的元素查找/操作仍未验证（GAP-47，需 debug 包 + WebView 调试）。
 - 不做 iOS：`platform=IOS` 在 `start()` 时明确报"需 macOS/云真机（M4.3）"。
 
 ### 1.4 验收锚点
@@ -47,6 +47,8 @@
 | V7 | 复用：同一 suite 再跑一次 | 不新增元素/用例；第二次仍 PASSED |
 | V8 | 报告 | 含 `platform=ANDROID`、`engine=appium`、步骤明细与 fallback |
 | V9 | 回归 | `pytest` 全绿；`lint-imports` 2 kept；CI 三 job 绿 |
+
+> M4.2 的验收锚点见 §7.7（真机两个用例集 15/15、9/9 + M4.1 星财富回归 5/5）与 §7.8（五个真机坑的修法）。
 
 ---
 
@@ -80,6 +82,7 @@
 | `new_command_timeout` | | `180` | 会话空闲超时（秒） |
 | `auto_grant_permissions` | | `true` | 自动授权运行时权限 |
 | `adb_exec_timeout` | | `60000` | adb 执行超时（毫秒） |
+| `gesture_inset_px` | | 屏高 8%（≥120px） | **M4.2 新增（可选）**：整屏手势的安全区内缩；不内缩会把系统通知栏拉下来 |
 
 > 缺 `udid` 或 `app_package` → 执行在 `start()` 阶段报 `ValidationFailed`，错误消息直接指出缺哪个键；不会静默连错设备。
 

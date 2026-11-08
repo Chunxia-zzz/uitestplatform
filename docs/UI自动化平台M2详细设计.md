@@ -838,7 +838,7 @@ async def probe_locator(self, chain: LocatorChain, ctx: ActionContext) -> Locato
 | 单次验证总超时 | 30s | 起浏览器 + 导航 + N 条探测，正常 2–5s；超过 30s 一定是环境问题 |
 | 单条探测超时 | 5s | XPath 在最坏页面上可能很慢，但不能无限等 |
 | 单次最多验 | 20 条 | 超过则拒绝 `BATCH_LIMIT_EXCEEDED`，避免"验 200 条"变成一次全量扫描 |
-| 项目级并发 | 1（进程内 `asyncio.Lock`） | 同时起 5 个浏览器会打爆内存；M3 有多 worker 时改 Redis 分布式锁 |
+| 项目级并发 | 1（进程内 `asyncio.Lock`） | 同时起 5 个浏览器会打爆内存。**M3 已决策单进程（D23），不引入 Redis 分布式锁** |
 | 清理 | `finally: await adapter.stop()` | **不清理会留下僵尸 Chromium 进程**，跑几次验证后开发机的内存就满了 |
 
 ```python
@@ -1525,7 +1525,7 @@ export const useElementStore = defineStore('element', () => {
 | RV12 | 拾取器入口（M3 调试器内） | D14 已定推迟 | 新增接口，不改现有 |
 | RV13 | 跨项目共享元素 | D16 已定推迟 | `is_shared` 语义启用 + 引用计数 |
 | RV14 | `element_locator` 加 `healed_at` / `heal_source` | 二期自愈用 | 加列（FR16 允许） |
-| RV15 | 验证的分布式锁（Redis） | M3 有多 worker 时 | 替换 `asyncio.Lock` |
+| RV15 | 验证的分布式锁（Redis） | ~~M3 有多 worker 时~~ **已判不适用**：D23 定单进程 | 替换 `asyncio.Lock` |
 
 ### 6.3 交给 M3 的输入清单
 
@@ -1539,7 +1539,7 @@ export const useElementStore = defineStore('element', () => {
 | 定位符健康度（谁最稳） | 数据源已就绪（`execution_step_result` + `probe_detail`） | 🟡 **需 M3 有执行数据后聚合** |
 | 用例目录复用树组件 | `components/AppTree.vue` | ✅ |
 
-**M3 必须补的**（相对 M2）：Redis 队列 + worker、WebSocket 推送、StepEditor（含元素选择器）、报告渲染、通知、定位符健康度聚合页。
+**M3 必须补的**（相对 M2）：~~Redis 队列~~（D23 改为进程内队列）+ worker、WebSocket 推送、StepEditor（含元素选择器）、报告渲染、通知（M3.6/M3.7 已交付企微/飞书）、定位符健康度聚合页（未做）。
 
 ### 6.4 变更流程
 

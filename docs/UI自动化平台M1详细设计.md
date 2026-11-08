@@ -67,7 +67,7 @@ DDL 在本项目里会出现在三个地方，必须明确**优先级**，否则
 |---|---|---|
 | D1 | 从零自建，只借鉴架构 | 不引入 `toolium` / `mops` / `@wix-pilot/*` |
 | D2 | Python + FastAPI | 见 §2.4 依赖清单 |
-| D3 | 一期仅 Web + 适配器骨架 | Appium/u2 只留桩（§2.5.9） |
+| D3 | 一期仅 Web + 适配器骨架 | Appium/u2 只留桩（§2.5.9）。**后续**：appium 已在 M4.1/M4.2 实现（Android），u2 仍为桩 |
 | D4 | 完整方案（不含 API 契约） | M1 契约在 §3 内补齐（范围仅 M1） |
 | D5 | 端只有 `WEB` / `ANDROID` / `IOS` | 全部 ENUM 不含 `WAP` |
 | D6 | 动作命名英文 `snake_case`、语义自明 | 附录 B 全部动作 key 遵循此约定 |
@@ -158,13 +158,13 @@ M1 的价值不在功能多，而在**架构定型**：如果 M1 结束时"新�
 |---|---|---|---|
 | **V1** | 骨架可启动、DDL 可建表 | `alembic upgrade head` → 启动 `uvicorn` | 11 张表全部建成；`GET /healthz` 返回 `{"status":"ok","engines":3,"db":"ok"}` |
 | **V2** | Playwright 端到端跑通 | `python -m app.cli run-plan tests/fixtures/plans/login_web.json` | 退出码 0；日志出现 `navigate → input → click → get_text → screenshot` 全 `PASSED`；截图文件真实产生 |
-| **V3** | 显式路由生效 | `pytest tests/unit/test_registry.py` | `resolve("WEB","playwright")` 成功；`resolve("ANDROID","appium")` 成功（桩）；`resolve("WEB","appium")` 抛 `ValueError`；`resolve("WEB","nope")` 抛 `LookupError` |
-| **V4** | 动作分发与参数映射正确 | `pytest tests/unit/test_actions.py` | 每个引擎动作经 `dispatch` 后**恰好一次**调用到 adapter 同名方法，参数与 `params_schema` 一致 |
-| **V5** | 能力矩阵一致性双向强校验 | `pytest tests/unit/test_capabilities.py` | 故意从字典删一条动作 → 启动自检**拒绝启动**并报出具体 action_key |
+| **V3** | 显式路由生效 | `pytest tests/unit/test_registry.py`（**未落地**，见 GAP-49） | `resolve("WEB","playwright")` 成功；`resolve("ANDROID","appium")` 成功（桩）；`resolve("WEB","appium")` 抛 `ValueError`；`resolve("WEB","nope")` 抛 `LookupError` |
+| **V4** | 动作分发与参数映射正确 | `pytest tests/unit/test_actions.py`（**未落地**，见 GAP-49） | 每个引擎动作经 `dispatch` 后**恰好一次**调用到 adapter 同名方法，参数与 `params_schema` 一致 |
+| **V5** | 能力矩阵一致性双向强校验 | `pytest tests/unit/test_domain_dicts.py` | 故意从字典删一条动作 → 启动自检**拒绝启动**并报出具体 action_key |
 | **V6** | 回退链按优先级 + 精确优先通配 | `pytest tests/unit/test_resolver.py` | 表驱动覆盖 §2.5.5 的 6 个用例（含 `engine_key='*'` 通配） |
 | **V7** | 架构红线（L3 不得 import 引擎库） | `lint-imports` | 0 个 violation；**并且**故意在 `services/` 里 `import playwright` → 必须报错 |
-| **V8** | 桩适配器不静默失败 | `pytest tests/unit/test_stubs.py` | `AppiumAdapter().start()` 抛 `NotImplementedError` 且消息含 "M4" |
-| **V9** | 二期友好性（6+1 项，纯本地） | `pytest tests/unit/test_phase2_readiness.py` | §5.6 全部通过（含 `SessionManager` 非单例） |
+| **V8** | 桩适配器不静默失败 | `pytest tests/unit/test_stub_adapter.py` | `AppiumAdapter().start()` 抛 `NotImplementedError` 且消息含 "M4" |
+| **V9** | 二期友好性（6+1 项，纯本地） | `pytest tests/unit/test_phase2_readiness.py`（**未落地**，见 GAP-49） | §5.6 全部通过（含 `SessionManager` 非单例） |
 
 ### 1.5 完成定义（DoD）
 
@@ -2145,10 +2145,10 @@ async def test_unimplemented_distinguishable_from_unsupported(cls):
 
 | 文件 | 覆盖 | 关键用例 |
 |---|---|---|
-| `test_registry.py` | V3 | 成功 resolve；platform 不匹配抛 `ValueError`；未注册 key 抛 `LookupError`；重复注册抛错；`clear_registry()` 可用 |
+| `test_registry.py` | V3（**未落地**，见 GAP-49） | 成功 resolve；platform 不匹配抛 `ValueError`；未注册 key 抛 `LookupError`；重复注册抛错；`clear_registry()` 可用 |
 | `test_capabilities.py` | V5 | 正常数据通过；方向 A 故意删一条 → 抛；方向 B 故意加一条矩阵 → 抛；`engines=[]` 的内建动作不参与方向 A |
 | `test_resolver.py` | V6 | §2.5.5 的 6 个表驱动用例 |
-| `test_actions.py` | V4 | 引擎动作转发（mock adapter，断言调用次数=1、参数名匹配）；内建动作不触达 adapter；`supports=False` 时抛 `UNSUPPORTED_ACTION`；`needs_element` 但 chain 为 None 时抛 |
+| `test_actions.py` | V4（**未落地**，见 GAP-49） | 引擎动作转发（mock adapter，断言调用次数=1、参数名匹配）；内建动作不触达 adapter；`supports=False` 时抛 `UNSUPPORTED_ACTION`；`needs_element` 但 chain 为 None 时抛 |
 | `test_render.py` | — | `${var}` 替换；未定义变量保留原样；嵌套 dict/list；非字符串原样返回 |
 | `test_session.py` | V9-7 | **两个 SessionManager 实例互不干扰**；`adapter_for` 幂等（同一实例）；`stop_all` 逆序且在异常时仍释放其余；`active_engines` 可含 2 个引擎（模拟二期） |
 | `test_builtin_actions.py` | — | 9 个内建动作各 1–2 例；`assert_equals` 的 `1` vs `"1"` 行为；`eval_expression` 拒绝白名单外表达式 |
@@ -2228,7 +2228,7 @@ curl -s localhost:8000/healthz | jq            # {"status":"ok","engines":3,...}
 mysql -uroot -p ui_test -e "DELETE FROM action_catalog WHERE action_key='navigate'"
 uvicorn app.main:app --port 8001                # 期望：启动失败，报 [孤儿动作] playwright.navigate
 mysql -uroot -p ui_test -e "INSERT ..."         # 恢复
-pytest tests/unit/test_capabilities.py -v
+pytest tests/unit/test_domain_dicts.py -v
 
 # ── V2 CLI 端到端 ──
 python -m http.server 8899 --directory fixtures/web &
@@ -2237,7 +2237,7 @@ python -m app.cli run-plan tests/fixtures/plans/login_web.json \
 # 期望：8/8 PASSED；日志含 locator.hit 且 fallback_index=0；artifacts/ 下有 png
 
 # ── V3 / V8 路由与桩 ──
-pytest tests/unit/test_registry.py tests/unit/test_stubs.py -v
+pytest tests/unit/test_adapter_contract.py tests/unit/test_stub_adapter.py -v
 python -m app.cli engines
 python -m app.cli check-capabilities
 
@@ -2246,7 +2246,7 @@ lint-imports                                     # 期望 0 violations
 # 反向验证：临时在 services/project_service.py 顶部加 import playwright → lint-imports 必须报错 → 删掉
 
 # ── V9 二期友好性 ──
-pytest tests/unit/test_phase2_readiness.py -v
+# V9（二期友好性）目前无自动化测试，见 GAP-49
 
 # ── 全量 ──
 pytest -q && pytest -m e2e -q

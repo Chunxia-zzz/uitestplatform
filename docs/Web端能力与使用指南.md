@@ -2,9 +2,9 @@
 
 | 项 | 内容 |
 |---|---|
-| **适用版本** | M1 骨架 + M2 元素库 + M3 执行内核 / 编排 / 一键接入（2026-10-19） |
+| **适用版本** | M1 骨架 + M2 元素库 + M3 执行内核 / 编排 / 一键接入 + M3.6/M3.7 通知（Web 端口径；Android 见 D2-M4） |
 | **结论口径** | 本文所有"支持/不支持"均以代码为准，核验命令写在每条后面 |
-| **配套文档** | D2-M1（适配层）· D2-M2（元素库）· D2-M3（执行）· D2-M3.4（一键接入） |
+| **配套文档** | D2-M1（适配层）· D2-M2（元素库）· D2-M3（执行）· D2-M3.4（一键接入）· D2-M4（Android/Appium） |
 
 ---
 
@@ -83,7 +83,7 @@ testid · css · xpath · id · class · text · role · label · placeholder ·
 | 5 | **iframe 只能按 index 进** | 不能按元素/URL 定位 iframe；动态顺序的页面需要先 `switch_to_page` 或改结构 | ⏸ 顺延（GAP-12） |
 | 6 | **无元素拾取器** | 定位符必须手工录入或由输入提供（D14 决策）；有"一键验证"但没有"页面点选" | 设计决策，非缺陷 |
 | 7 | **移动浏览器不是独立端** | `WEB` + `execution_target.options.device`（如 iPhone 15 仿真）；不设 `WAP` 端（D5） | 设计决策 |
-| 8 | **Appium / uiautomator2 只有桩** | 建 Android/iOS 项目能建，但执行会抛 `NotImplementedError` | M4 |
+| 8 | **Appium 只覆盖 Android**；uiautomator2 仍是桩 | Android + `engine_key=appium` 可真机执行（26 个动作可用，`hover`/`select_option` 平台不适用）；`platform=IOS` 会明确报「需 macOS/云真机」；`engine_key=uiautomator2` 调用仍抛 `NotImplementedError`。详见 `UI自动化平台M4详细设计.md` | M4.1/M4.2；iOS 待 M4.3 |
 | 9 | **单进程执行** | 进程重启会丢排队任务（启动自愈把残留置 `ERROR`）；WS 只在同进程有效 | D23 决策 |
 | 10 | **SQLite 不做 ENUM 强约束** | 生产建议 MySQL 8 + `sql/schema.sql` | 环境约束 |
 

@@ -10,8 +10,8 @@
 
 - **多引擎 UI 自动化平台**：小型测试团队内部使用（非 SaaS、单机单实例）。
 - **主链**：项目 → 用例集 → 用例 → 元素+动作 → 按端路由引擎执行 → 报告。
-- **端**：`WEB`（Playwright，28/28 动作全实现）；`ANDROID` / `IOS`（**桩**，M4 实现——用户已冻结：Web 端验收通过后再启动）。
-- 技术栈：FastAPI + SQLAlchemy async + Alembic + APScheduler + Playwright（python）+ Vue 3/Vite/TS（无 UI 组件库）。
+- **端**：`WEB`（Playwright，28/28 动作全实现）；`ANDROID`（Appium，**26 个动作可用 + 2 个平台不适用**，M4.1/M4.2 已交付，真机验收通过）；`IOS` 与 `uiautomator2` 仍是桩（M4.3）。
+- 技术栈：FastAPI + SQLAlchemy async + Alembic + APScheduler + Playwright（python）+ Appium REST（httpx 直连）+ Vue 3/Vite/TS（无 UI 组件库）。
 - 代码仓库：`F:\jerryyang-uitestplatform`（monorepo：docs/ + backend/ + frontend/ + scripts/）。
 - GitHub：https://github.com/Chunxia-zzz/uitestplatform （main 分支，Apache-2.0 LICENSE）。
 
@@ -20,10 +20,10 @@
 | 维度 | 状态 |
 |---|---|
 | 里程碑 | **M1 / M2 / M3.1 / M3.2 / M3.3 / M3.4 / M3.5 / M3.6 / M3.7 全部完成**；**M4.1（Android/Appium 平台侧 + 用例固化）与 M4.2（手势/滑动/上下文 + 执行加固）已完成**（11 份施工图） |
-| 规模 | 64 API 操作 · 51 条动作字典 · 13 张表 · 50 个错误码 · 8 个前端页 |
-| 质量基线 | `pytest` **273 passed + 1 skipped**（MySQL 集成按 env 门控）；五份冒烟 **113 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 27）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异 |
+| 规模 | 64 API 操作 · 51 条动作字典 · 13 张表 · 54 个错误码 · 8 个前端页 |
+| 质量基线 | `pytest` **273 passed + 1 skipped**（MySQL 集成按 env 门控）；五份 Web 冒烟 **113 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 27）；**真机验收 24 项**（设置 15 + 计算器 9）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异 |
 | CI | **GitHub Actions 三个 job 全绿**（backend / frontend / e2e），红灯与 `needs` 跳过已实测；`.github/workflows/ci.yml` + 本地同源 `scripts/ci_local.sh`；**无 CD**（D40） |
-| Android | **真机 PJA110（Android 16 / `3149dfe3`）已跑通平台用例**：执行 #125/#126 PASSED，5 步含回退链 `fallback_index=1` 与截图产物；`appium` 已实现 12/28 动作（M4.2 补剩余） |
+| Android | **真机 PJA110（Android 16 / `3149dfe3`）已跑通平台用例**：设置 15/15（#140）、计算器 9/9（#141）、星财富回归 5/5（#139，`fallback_index=1`）；`appium` 覆盖 **28/28 声明动作**（26 个可用 + `hover`/`select_option` 平台不适用） |
 | 验收 | 《docs/验收评估报告.md》结论"可进入验收"；**2026-11-02 已自动复跑全部证据并修 2 处**（/scan 文本列表头与折行、m36 V12 空转）→ 只剩用户手工走查 §5.1 手感项 |
 | 验收前审计 | 已做过两轮：2026-10-20 修 1 个竞态；2026-11-02 修扫描表头 + 修正 V12 验收脚本 |
 
@@ -120,12 +120,12 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
 |---|---|---|
 | 1 | **生产库选型**：SQLite（现状）vs MySQL 8（D1 原定） | 选 MySQL → 部署时切 `UIP_DATABASE_URL` + 跑 GAP-25；选 SQLite → 改判 GAP-25 不适用 + 更新 D1 |
 | 2 | **「执行目标管理」前端页**要不要排期 | 现状：target/trace/video/har 只能 env 或 API 配置，无页面 |
-| 3 | **M4.2 手势/WebView 排期** | M4.1 只做 12/28 动作；手势、context 切换、元素级截图归 M4.2 |
+| 3 | **GAP-47 WebView 内部元素**要不要现在做 | 上下文列表/切换已实现（M4.2）；切进 `WEBVIEW_*` 后的元素操作需要 App 为 debug 包且开 WebView 调试，需业务方提供包与 H5 页面 |
 
 ## 9. 下一步开发优先级（依赖序）
 
 ```
-1. M4.2：Appium 剩余 16 动作（手势/滑动/列表/context）+ 元素级截图
+1. GAP-47：WebView 内部元素（等业务方 debug 包 + H5 页面，见 §8 决策 #3）
 2. M4.3：iOS（macOS/云真机）、uiautomator2 引擎、多设备租约
 3. GAP-09/10/12/13（网络拦截 / 下载 / iframe 按元素 / 执行级变量）
 4. D3 工程约定（目录/命名/错误码/Git 流程/测试规范）
@@ -135,7 +135,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
 ## 10. 已知限制（对用户如实交代过的）
 
 - trace/video/HAR 无页面配置；通知支持企微 / 飞书单选（D41），仍无管理 UI；
-- **Android 仅 M4.1**：Appium 12/28 动作（无手势 / WebView / 元素级截图）、单设备串行、iOS 未实现（M4.2/M4.3）；
+- **Android 到 M4.2**：26 个动作可用（`hover`/`select_option` 平台不适用）、单设备串行、WebView 内部元素未验证（GAP-47）、iOS/uiautomator2 未实现（M4.3）；冷启动开屏广告需用例侧处理（GAP-48）；
 - 无下载处理、网络拦截、trace 之外没有 Shadow DOM 穿透、iframe 只能按 index；
 - 单机单进程语义：重启丢排队任务（启动自愈置 ERROR）、WS 仅同进程（前端有 5s 轮询兜底）；
 - `schema.sql` 是 MySQL DDL，SQLite 下 ENUM 无 DB 级强校验。

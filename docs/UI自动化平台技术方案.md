@@ -1,12 +1,14 @@
 # UI 自动化平台 · 技术方案（v1.0）
 
+> ⚠️ **修订提示（2026-11-08）**：本文是 v1.0 首版总方案，部分选型已被后续决策覆盖 —— **队列用进程内 `asyncio.Queue`（D23/D26，不用 Redis）**、**CI 已接入但无 CD（D40）**、**Android 已按 D42/D43 落地（M4.1/M4.2）**、**生产库 SQLite vs MySQL 8 仍待定**。带 Redis 的段落仅作历史设计保留，实现以 `backend/` 代码与《HANDOVER》为准。
+
 | 项 | 内容 |
 |---|---|
 | 文档版本 | v1.0（首版） |
 | 编写日期 | 2026-10-14 |
 | 上游依据 | 《UI 自动化平台技术选型报告.md》（含**附录 B** 本地调试环境方案、**附录 C** 二次验证与结论更新） |
 | 方案性质 | **从零自建**，仅借鉴开源项目的**架构设计**，**不复制任何代码** |
-| 后端技术栈 | **Python 3.11+ + FastAPI + SQLAlchemy 2.x + MySQL 8 + Redis** |
+| 后端技术栈 | **Python 3.11+ + FastAPI + SQLAlchemy 2.x + SQLite（默认）/ MySQL 8（生产选型待定）**；队列用进程内 `asyncio.Queue`（D23，**不用 Redis**） |
 | 前端技术栈 | **Vue 3 + Vite + TypeScript**（UI 组件库待定，参考 Arco Design / Element Plus） |
 | 一期范围 | **Web 端（Playwright）+ 适配器骨架**，零设备成本 |
 | 文档粒度 | **完整方案**：目标架构 + 数据模型（含 DDL）+ EngineAdapter 接口 + 路由机制 + 里程碑与风险 |
@@ -1138,7 +1140,7 @@ class LocatorResolver:
 [L3] ExecutionService.create()
    ├─ 快照 project.platform / engine_key / target.options  → execution 行（PENDING）
    ├─ 展开 case_ids（含步骤、元素）→ 组装 ActionPlan
-   └─ 投递 Redis 队列（按 project_id 分片，保证同项目串行/按 threads 并发）
+   └─ 投递进程内队列（asyncio.Queue + Semaphore，单进程语义；D23/D26 —— 原设计为 Redis 队列）
    ▼
 [L2] Worker 消费
    ├─ registry.resolve(platform, engine_key) → AdapterClass
@@ -1198,7 +1200,7 @@ CANCELLED      ┌────────┐   │ 判定汇总 │
 |---|---|---|
 | 批次 | 一个 `execution` 一个 worker | 避免同一浏览器/设备被抢占 |
 | 用例 | `project.threads` 控制协程并发 | Web 场景下每用例独立 `context`，天然隔离 |
-| 项目间 | Redis 队列多 worker | 一期单机可起 2–4 个 worker |
+| 项目间 | 进程内队列 + `Semaphore(max_concurrent_executions=2)`（D23） | 多 worker/多实例才需要 Redis，目前明确不做 |
 
 **一期限制**：Web 场景 `threads` 建议 ≤ 4（受内存与 Chromium 实例数限制）。App 场景（二期）需按"设备数"限制，不能用 `threads` 直接控制 —— 这一约束在二期文档里给出。
 
@@ -1212,7 +1214,7 @@ CANCELLED      ┌────────┐   │ 判定汇总 │
 | `case.finished` | `{execution_id, case_id, status, duration_ms}` |
 | `execution.finished` | `{execution_id, status, passed, failed, errored, pass_rate}` |
 
-通道设计：`/ws/executions/{execution_id}`（单批次订阅）+ `/ws/projects/{project_id}`（项目级汇总）。基于 Redis Pub/Sub 做多 worker → 单前端广播。
+通道设计：`/ws/executions/{execution_id}`（单批次订阅）+ `/ws/projects/{project_id}`（项目级汇总）。**实现为同进程事件总线**（D24）：跨进程收不到 WS，前端另有 5s 轮询兜底；原设想的 Redis Pub/Sub 随 D23 一并放弃。
 
 ---
 
@@ -1292,7 +1294,7 @@ aiomysql = "^0.2"
 alembic = "^1.13"
 pydantic = "^2.9"
 pydantic-settings = "^2.6"
-redis = "^5.2"
+# 原设计含 redis = "^5.2"，已按 D23 移除
 apscheduler = "^3.10"
 playwright = "^1.51"
 # 二期：Appium-Python-Client = "^4.0"; uiautomator2 = "^3.5"
@@ -1308,11 +1310,11 @@ jinja2 = "^3.1"
 | **M1 · 骨架与适配层** | 项目脚手架；`sql/schema.sql` 全表；`engines/base.py` + `registry.py` + `capabilities.py`；**PlaywrightAdapter 完整实现**；`importlinter` 红线生效 | ① `python -m pytest tests/unit` 通过；② 用一段硬编码 ActionPlan 驱动 Playwright 跑通一个真实页面（导航/输入/点击/取文本/截图）；③ `resolve('ANDROID','appium')` 成功、`resolve('WEB','appium')` 抛错；④ import-linter 校验通过 |
 | **M2 · 元素库与多端 Locator** | `element` + `element_locator` 的 CRUD API 与 UI（含树形、拖拽排序）；`LocatorResolver` 回退链；定位类型校验 | ① 同一元素配 Web/Android/iOS 三套定位符；② Web 用例改用 `element_id` 引用后仍跑通；③ 故意把首选定位符写错，验证自动回退到第 2 条并在结果里记录 `fallback_index=1` |
 | **M3 · 编排 / 执行 / 报告** | `action_catalog` 种子数据 + 前端 StepEditor（由字典驱动）；`ExecutionService` + Redis 队列 + `SessionManager`；WebSocket 实时推送；HTML + JUnit 报告；失败截图/DOM | ① 图形化编排出 ≥ 5 步用例并执行成功；② 看板实时步进；③ 报告可下载，含失败截图与 DOM；④ 通知（钉钉/企业微信）可发送 |
-| **M4 · 扩端（可选，二期）** | AppiumAdapter 实现 + AVD 环境；然后 iOS（云真机）+ WebView 接棒。**详细设计见配套文档《移动端对接方案》** | ① 同一用例在 `engine_key=uiautomator2` 与 `appium` 下用各自的 `element_locator` 均能跑通（验证 P2 的价值）；② WebView 场景：Appium 切 context → Playwright 通过 CDP 接棒完成 WebView 内操作 |
+| **M4 · 扩端（二期，Android 已交付）** | AppiumAdapter 实现 + 真机环境；**M4.1（平台侧 + 用例固化）/ M4.2（手势、上下文、执行加固）已完成**（见 `UI自动化平台M4详细设计.md`）；iOS（云真机）+ WebView 内部元素待 M4.3/GAP-47。**详细设计见《移动端对接方案》+《M4 详细设计》** | ① 同一用例在 `engine_key=uiautomator2` 与 `appium` 下用各自的 `element_locator` 均能跑通（验证 P2 的价值）；② WebView 场景：Appium 切 context → Playwright 通过 CDP 接棒完成 WebView 内操作 |
 
-**建议节奏**：M1 → M2 是关键路径（架构定型），M3 是体量最大的一块，M4 待 M1–M3 稳定后再启动（与附录 B.6 的推进顺序一致）。
+**建议节奏**：M1 → M2 是关键路径（架构定型），M3 是体量最大的一块，M4 在 M1–M3 稳定后启动。**实际执行**：M4.1/M4.2 已于 2026-11-08 交付 Android 侧。
 
-> **M4 的详细方案已单独成文**：《UI自动化平台 · 移动端对接方案（Android / iOS / WebView）》。按当前决策，**M4 不着急实现**，该文档的作用是：① 确保 M1–M3 的实现不挡住二期（见该文档第 6 节「对一期的依赖清单」）；② 二期启动时无需重新调研。
+> **M4 的详细方案已单独成文**：《UI自动化平台 · 移动端对接方案（Android / iOS / WebView）》+《UI自动化平台 M4 详细设计》。**Android 部分已于 2026-11-08 实现**，D1a 剩下的作用是：① 确保 M1–M3 的实现不挡住二期（见该文档第 6 节「对一期的依赖清单」）；② 二期启动时无需重新调研。
 
 ---
 
@@ -1403,7 +1405,7 @@ jinja2 = "^3.1"
 | **《UI自动化平台 · 移动端对接方案（Android / iOS / WebView）》** | Appium / uiautomator2 适配器实现清单、AVD 与云真机环境、iOS 三方案、WebView 接棒编排、二期里程碑与验收 | ✅ 已编写，**按决策"不着急实现"**，作为预留对接方案 |
 | **《UI自动化平台 M1 详细设计》**（D2-M1） | M1 施工图：逐文件设计 · 接口签名冻结（17 条）· 51 条动作字典种子 · DDL 冻结版 · 9 条可执行验收标准 · 附录 D 待实测清单 | ✅ 已编写（v1.1，评审通过） |
 | **《UI自动化平台 M2 详细设计》**（D2-M2） | M2 施工图：三端定位字典（语义/语汇分层）· 树形模型与 path 维护 · 定位符验证器 · 18 个端点 · 元素库三栏前端 · 10 条验收标准 | ✅ 已编写（v1.0，待评审） |
-| **《UI自动化平台 M3 / M4 详细设计》**（D2-M3/M4） | 编排执行报告 / 扩端 | ⬜ 待编写（按 D17 顺序） |
+| **《UI自动化平台 M3 / M4 详细设计》**（D2-M3/M4） | 编排执行报告 / 扩端 | ✅ D2-M3 与 D2-M4 均已编写并落地（M4.1/M4.2 已实现） |
 
 **需要实测才能确认的事（不阻塞本篇）**：
 

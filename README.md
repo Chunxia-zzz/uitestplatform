@@ -15,7 +15,7 @@
 Web 端用 Playwright 真实执行；**Android 用 Appium 真机执行（M4.2：26 个动作可用 + 2 个平台不适用，见 `docs/UI自动化平台M4详细设计.md`）**；uiautomator2 仍是桩（M4.3）。
 
 ```
-Project(platform, engine_key) ──► EngineRegistry ──► PlaywrightAdapter / AppiumAdapter(桩) / U2Adapter(桩)
+Project(platform, engine_key) ──► EngineRegistry ──► PlaywrightAdapter / AppiumAdapter / U2Adapter(桩)
                                         ▲
                         element ──► element_locator(platform × engine_key, priority 回退链)
 ```
@@ -38,7 +38,7 @@ jerryyang-uitestplatform/
 │  ├─ UI自动化平台M3.5详细设计.md      D2-M3.5 元素扫描（URL → 候选 → 人工确认落库，已实现）
 │  ├─ UI自动化平台M3.6详细设计.md      D2-M3.6 平台收尾（target CRUD / 企微通知 / trace-video-HAR，已实现）
 │  ├─ UI自动化平台M3.7详细设计.md      D2-M3.7 飞书通知渠道（channel 单选 / interactive 卡片 / 关键词，已实现）
-│  ├─ UI自动化平台M4详细设计.md        D2-M4 Android/Appium 平台侧 + 用例固化（M4.1 已实现）
+│  ├─ UI自动化平台M4详细设计.md        D2-M4 Android/Appium 平台侧 + 用例固化 + M4.2 手势/上下文（已实现）
 │  ├─ Web端能力与使用指南.md           ★ 能测什么 / 怎么写用例 / 怎么执行（与代码同步）
 │  └─ 待办与缺口跟踪.md               ★ 未完成/待确认事项唯一清单（含核验命令）
 │
@@ -58,7 +58,7 @@ jerryyang-uitestplatform/
 │  │  │  ├─ resolver.py        LocatorResolver 回退链解析
 │  │  │  ├─ session.py         SessionManager（非单例，FR8）
 │  │  │  ├─ actions.py         动作分发（方法名==action_key，无映射表）+ 9 个内建动作
-│  │  │  └─ adapters/          playwright_adapter（完整）/ stub_adapter（Appium、u2 桩）
+│  │  │  └─ adapters/          playwright_adapter（Web 28 动作）/ appium_adapter（Android 26 动作）/ stub_adapter（u2 桩）
 │  │  ├─ models/               13 张表的 ORM（含 test_suite / test_suite_case）
 │  │  ├─ repositories/         element_repo（含子树 path 重写）/ locator_repo
 │  │  ├─ services/             tree / element / locator / locator_verify / project
@@ -143,6 +143,7 @@ Linux / macOS 把 `scripts\setup.ps1` 换成 `scripts/setup.sh`，python 路径�
 | `e2e` | seed-demo → 起后端 8000 + fixture 8899 → `smoke_m3/m32/m34/m35`（真 Chromium）；`needs: backend` |
 
 本地跑与 CI 同一组命令：`bash scripts/ci_local.sh`（加 `--with-e2e` 时需 8000/8899 已启动）。
+**Android 真机验收不进 CI**：`scripts/smoke_android_gestures.py` 需要真机 + Appium Server，GitHub 托管 runner 接不了设备，按 `docs/HANDOVER.md` 的命令本地跑（接 self-hosted runner 才可能自动化）。
 **没有 CD**：项目尚未部署到线上，不建空转的部署 job。
 
 ### Android 用例固化（M4.1）
@@ -209,8 +210,8 @@ NO_PROXY=127.0.0.1,localhost python scripts/demo_android_case.py
 | **登录态复用**（`storage_state` 读 / `save_storage_state` 写） | ✅ M3.2 |
 | **Alembic 迁移**（baseline + `alembic check` 一致性） | ✅ M3.2 |
 | 用例集成员启用开关 / 执行列表按用例集筛选 | ✅ M3.2 |
-| **Android / Appium**（真机；12 个核心动作；回退链 / 截图 / 报告） | ✅ M4.1 |
-| Appium 手势 / WebView / iOS；uiautomator2 | 🟡 M4.2 / M4.3 |
+| **Android / Appium**（真机；26 个动作可用 + 2 个平台不适用；回退链 / 手势 / 上下文 / 元素级截图 / 报告） | ✅ M4.1 + M4.2 |
+| WebView 内部元素（GAP-47）/ iOS / uiautomator2 | 🟡 待办（M4.3 / 需业务方 debug 包） |
 | 通知管理 UI / 健康度页 / trace 页面配置 / 网络拦截 | ⏸ 暂不做或顺延（见跟踪清单） |
 | 登录鉴权 / 跨项目共享元素 / 定位自愈 | ⬜ 二期 |
 
@@ -218,14 +219,14 @@ NO_PROXY=127.0.0.1,localhost python scripts/demo_android_case.py
 
 - **队列是进程内**（D23，**已确认不做 Redis**）：重启会丢排队任务（启动自愈把残留置 ERROR），WS 只在同进程有效；多实例部署才需要改，触发条件见 M3 §0.5。
 - **取消只在步骤之间生效**（D22）：不强杀浏览器，避免半截会话与脏产物。
-- **一次执行一个会话**：WebView 双会话要等 M4。
-- **`probe_locator` 只精确到 Playwright**：桩适配器走基类默认实现（count ∈ {0,1}）。
+- **一次执行一个会话**：Appium 会话只切上下文（`switch_to_context`），WebView 内部元素自动化仍未做（GAP-47）。
+- **`probe_locator`**：Playwright 与 Appium 都有实现（Appium 返回真实命中数）；uiautomator2 桩走基类默认（count ∈ {0,1}）。
 - **SQLite 不做 ENUM 强约束**：生产用 MySQL 8 + `sql/schema.sql` 才能获得 ENUM 校验。
 - **iOS 自动化需要 macOS**：架构级约束，见 D1a。
 - **改表必须走 Alembic**：`cd backend && alembic revision --autogenerate -m "..."`，再 `alembic upgrade head`；
   `schema.sql` 仍是 MySQL DDL 事实源，两者由 `alembic check` 保证一致。
 - **`storage_state` 通过执行目标的 `options` 配置**（`storage_state` 读、`save_storage_state` 写），不是全局开关。
-- **无鉴权 / 无分页 / 无通知**：内网小团队场景，D26 明确不做。
+- **无鉴权 / 无分页 / 无通知管理 UI**：内网小团队场景；通知本身已支持企微/飞书单选（D32 / D41），但没有渠道管理页面。
 
 完整的未完成清单与核验命令见 [`docs/待办与缺口跟踪.md`](docs/待办与缺口跟踪.md)。
 
