@@ -14,11 +14,12 @@ from app.domain.locator_types import (
 )
 
 
-def test_action_catalog_is_51_and_unique():
-    assert len(ACTION_CATALOG) == 51
-    assert len(ACTION_BY_KEY) == 51
+def test_action_catalog_is_55_and_unique():
+    # M3.8（GAP-09/10/12/13）：字典 51 → 55（+mock_route/unmock_route/wait_for_response/download_file）
+    assert len(ACTION_CATALOG) == 55
+    assert len(ACTION_BY_KEY) == 55
     keys = [a.key for a in ACTION_CATALOG]
-    assert len(set(keys)) == 51
+    assert len(set(keys)) == 55
     # D6：英文 snake_case
     for key in keys:
         assert key.islower() and " " not in key, key

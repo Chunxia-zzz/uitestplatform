@@ -7,13 +7,17 @@ Playwright 的语汇（``[data-testid=…]`` / ``role=…`` / ``get_by_label``�
 from __future__ import annotations
 
 import asyncio
+import json as _jsonlib
 import logging
 import os
+import re
 import time
+from collections import deque
 from datetime import datetime
 from typing import Any
 
 from app.core.config import settings
+from app.core.errors import ValidationFailed
 from app.domain.enums import Platform
 from app.engines.base import (
     ActionContext,
@@ -29,6 +33,31 @@ logger = logging.getLogger(__name__)
 
 def _esc(value: str) -> str:
     return value.replace('"', '\\"')
+
+
+def _glob_to_regex(pattern: str) -> re.Pattern[str]:
+    """Playwright URL glob → 正则（wait_for_response 的收集器匹配用）。
+
+    语义与 page.route 的 URL 通配一致：``**`` 匹配任意字符（含 /）、
+    ``*`` 匹配除 / 外的任意字符、``?`` 单个非 / 字符，其余字面量。
+    """
+    parts: list[str] = []
+    i = 0
+    while i < len(pattern):
+        ch = pattern[i]
+        if ch == "*" and pattern[i:i + 2] == "**":
+            parts.append(".*")
+            i += 2
+        elif ch == "*":
+            parts.append("[^/]*")
+            i += 1
+        elif ch == "?":
+            parts.append("[^/]")
+            i += 1
+        else:
+            parts.append(re.escape(ch))
+            i += 1
+    return re.compile("".join(parts) + "$", re.IGNORECASE)
 
 
 class PlaywrightAdapter(EngineAdapter):
@@ -48,6 +77,12 @@ class PlaywrightAdapter(EngineAdapter):
         # M3.6 GAP-08：诊断录制状态
         self._trace_started: bool = False
         self._diagnostics_dir: str | None = None
+        # M3.8（GAP-09）：mock 注册表与网络响应收集器
+        # key = (pattern, method或None)；value = 注册的 handler（供精确 unroute）
+        self._active_routes: dict[tuple[str, str | None], Any] = {}
+        # (ts, url, status, method) —— ts 为 time.perf_counter 语义，与
+        # 执行器 case_started_ts 同钟；maxlen 防长执行内存膨胀。
+        self._responses: deque[tuple[float, str, int, str]] = deque(maxlen=500)
 
     # ─────────────────────── 生命周期 ───────────────────────
     async def start(self, config: SessionConfig) -> None:
@@ -117,7 +152,17 @@ class PlaywrightAdapter(EngineAdapter):
         self._page = await self._context.new_page()
         # ★ 必须预注册：弹窗是事件驱动，不预注册页面会永久阻塞（M1 §2.5.8）
         self._page.on("dialog", self._on_dialog)
+        # M3.8（GAP-09）：网络响应收集器 —— wait_for_response 的数据源；
+        # 只做内存记录，异常吞掉绝不影响页面/执行（R5 风格）。
+        self._page.on("response", self._on_response)
         self._session_id = f"pw-{int(time.time() * 1000)}"
+
+    def _on_response(self, response) -> None:
+        try:
+            self._responses.append((time.perf_counter(), response.url,
+                                    response.status, response.request.method))
+        except Exception:                              # pragma: no cover
+            logger.debug("collect response failed", exc_info=True)
 
     def _on_dialog(self, dialog) -> None:
         policy = self._dialog_policy
@@ -155,6 +200,8 @@ class PlaywrightAdapter(EngineAdapter):
         self._save_storage_state = None
         self._trace_started = False
         self._diagnostics_dir = None
+        self._active_routes.clear()
+        self._responses.clear()
 
     async def finalize_diagnostics(self, *, save_trace: bool) -> None:
         """诊断收尾（D35/D37）：保存或丢弃 trace。
@@ -176,6 +223,22 @@ class PlaywrightAdapter(EngineAdapter):
             logger.warning("trace 收尾失败", exc_info=True)
         finally:
             self._trace_started = False
+
+    async def reset_case_scope(self) -> None:
+        """用例边界清理（M3.8 FR-M3.8-4）：mock 全部解除 + iframe 弹栈清空。
+
+        同执行串行复用 adapter，上一用例遗留的 route/frame 状态会污染下一用例；
+        执行器在每个用例开始时调用本钩子（前用例异常中断也能兜住）。
+        """
+        if self._page is None:
+            self._active_routes.clear()
+            return
+        try:
+            await self._page.unroute_all()
+        except Exception:
+            logger.warning("unroute_all failed", exc_info=True)
+        self._active_routes.clear()
+        self._frame_stack.clear()
 
     async def create(self, config: SessionConfig) -> str:
         await self.start(config)
@@ -450,7 +513,23 @@ class PlaywrightAdapter(EngineAdapter):
         await self._page.reload(wait_until="domcontentloaded")
 
     async def switch_to_iframe(self, chain, ctx, *, index: int | None = None) -> None:
-        """D12：带参进、无参弹栈（单动作，不新增 switch_to_main_frame）。"""
+        """D12：带参进、无参弹栈（单动作，不新增 switch_to_main_frame）。
+
+        M3.8（GAP-12）新增"按元素进入"：步骤绑定 iframe 元素即进入该 iframe
+        （与出现顺序无关）；绑定与 index 互斥由写入口保证，此处只做防御。
+        """
+        if chain is not None:
+            if index is not None:                      # 防御：写入口已拦
+                raise ValidationFailed("switch_to_iframe 绑定元素与 index 只能二选一")
+            locator, _, _ = await self._first_visible(chain, ctx)
+            handle = await locator.element_handle()
+            frame = await handle.content_frame() if handle is not None else None
+            if frame is None:
+                raise ValidationFailed(
+                    f"元素 {chain.element_id} 命中的不是 iframe 节点，无法进入"
+                    "（请检查定位符是否指向 <iframe>/<frame>）")
+            self._frame_stack.append(frame)
+            return
         if index is None:
             if self._frame_stack:
                 self._frame_stack.pop()
@@ -496,3 +575,138 @@ class PlaywrightAdapter(EngineAdapter):
                             dialog_text: str | None = None) -> None:
         """只设置"后续弹窗策略"；handler 已在 start() 预注册。"""
         self._dialog_policy = {"accept": bool(accept), "text": dialog_text}
+
+    # ─────────────── 网络动作（M3.8 / GAP-09）───────────────
+    async def mock_route(self, chain, ctx, *, pattern: str, method: str | None = None,
+                         status: int = 200, content_type: str | None = None,
+                         body: str | None = None, json: dict | None = None,
+                         abort: bool = False) -> None:
+        """声明接口 mock：匹配请求不再到达真实后端（FR-M3.8-1/2）。
+
+        * key = (pattern, method)；同 key 重复声明**后写覆盖**（先摘旧 handler）。
+        * method 过滤在 handler 内判断：不匹配的请求 ``route.fallback()``
+          交给下一个 handler（同 pattern 不同 method 可各自 mock）。
+        * 响应体：``json``（application/json）或 ``body``（text/plain）
+          二选一，写入口已拦同给；``abort=True`` 时直接中断、其余字段忽略。
+        * 参数名 ``json`` 遮蔽模块是 FR4 冻结约定（kwargs 名 == schema 属性名）
+          的代价 —— 模块引用走 ``_jsonlib`` 别名。
+        """
+        method_key = method.upper() if method else None
+        key = (pattern, method_key)
+
+        async def handler(route) -> None:
+            if method_key and route.request.method.upper() != method_key:
+                await route.fallback()
+                return
+            if abort:
+                await route.abort()
+                return
+            if json is not None:
+                payload = _jsonlib.dumps(json, ensure_ascii=False)
+                ctype = content_type or "application/json"
+            elif body is not None:
+                payload = body
+                ctype = content_type or "text/plain"
+            else:
+                payload = ""
+                ctype = content_type or "text/plain"
+            await route.fulfill(status=status, body=payload,
+                                content_type=ctype)
+
+        old = self._active_routes.get(key)
+        if old is not None:                            # 覆盖：先摘旧 handler
+            try:
+                await self._page.unroute(pattern, old)
+            except Exception:
+                logger.warning("unroute old mock failed: %s", pattern, exc_info=True)
+        await self._page.route(pattern, handler)
+        self._active_routes[key] = handler
+
+    async def unmock_route(self, chain, ctx, *, pattern: str,
+                           method: str | None = None) -> None:
+        """解除 mock（FR-M3.8-3）：key 精确匹配；不存在报 ValidationFailed。"""
+        method_key = method.upper() if method else None
+        key = (pattern, method_key)
+        handler = self._active_routes.pop(key, None)
+        if handler is None:
+            raise ValidationFailed(
+                f"mock 声明不存在：pattern={pattern!r} method={method_key!r}"
+                "（解除必须与声明时完全一致）",
+                {"pattern": pattern, "method": method_key})
+        try:
+            await self._page.unroute(pattern, handler)
+        except Exception:
+            logger.warning("unroute failed: %s", pattern, exc_info=True)
+
+    async def wait_for_response(self, chain, ctx, *, pattern: str,
+                                method: str | None = None,
+                                expect_status: int | None = None,
+                                output_var: str | None = None) -> dict:
+        """等待/检索网络响应（FR-M3.8-5/6）。
+
+        在 ``ctx.timeout_ms`` 窗口内轮询收集器，匹配**自当前用例开始以来**的
+        最新一条；``expect_status`` 给出则状态不符视为未命中继续等。
+        超时抛 ValidationFailed，message 附近邻请求摘要（排查模式写错）。
+        """
+        regex = _glob_to_regex(pattern)
+        method_key = method.upper() if method else None
+        since = ctx.case_started_ts
+        interval = max(1, settings.assert_poll_interval_ms) / 1000
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max(0, ctx.timeout_ms) / 1000
+        while True:
+            hit = self._search_responses(regex, method_key, expect_status, since)
+            if hit is not None:
+                return ctx.set_var(output_var, hit)
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(interval, remaining))
+
+        recent = [f"{u} -> {s}" for _, u, s, _ in list(self._responses)[-5:]]
+        raise ValidationFailed(
+            f"等待网络响应超时（{ctx.timeout_ms}ms）：没有匹配 {pattern!r}"
+            + (f" 且 method={method_key}" if method_key else "")
+            + (f" 且 status={expect_status}" if expect_status is not None else "")
+            + " 的响应；近期请求：" + ("; ".join(recent) if recent else "（无记录）"),
+            {"pattern": pattern, "method": method_key, "expect_status": expect_status})
+
+    def _search_responses(self, regex: re.Pattern[str], method_key: str | None,
+                          expect_status: int | None,
+                          since: float | None) -> dict | None:
+        """倒序找最新一条匹配记录；无 case_started_ts 参考时不做时间过滤。"""
+        for ts, url, status, m in reversed(self._responses):
+            if since is not None and ts < since:
+                continue
+            if method_key and m.upper() != method_key:
+                continue
+            if expect_status is not None and status != expect_status:
+                continue
+            if regex.match(url):
+                return {"url": url, "status": status, "method": m}
+        return None
+
+    async def download_file(self, chain, ctx, *, output_var: str | None = None) -> str:
+        """点击绑定元素并接管浏览器下载（M3.8 / GAP-10，FR-M3.8-7/8/9）。
+
+        文件保存为 ``{artifacts_dir}/exec-{id}/downloads/{seq}-{文件名}``，
+        经 ``ctx.artifacts``（kind=DOWNLOAD）由执行器落库（FR34）；
+        多文件只保存第一个；未产生下载则超时失败。
+        """
+        if ctx.execution_id is None:
+            raise ValidationFailed("download_file 只能在执行链路中使用（缺 execution_id）")
+        locator, _, _ = await self._first_visible(chain, ctx)
+        download_dir = os.path.join(settings.artifacts_dir,
+                                    f"exec-{ctx.execution_id}", "downloads")
+        await asyncio.to_thread(os.makedirs, download_dir, exist_ok=True)
+        async with self._page.expect_download(timeout=ctx.timeout_ms) as dl_info:
+            await locator.click(timeout=ctx.timeout_ms)
+        download = await dl_info.value
+        suggested = os.path.basename(download.suggested_filename or "download.bin")
+        target_path = os.path.join(download_dir, f"{ctx.step_seq}-{suggested}")
+        await download.save_as(target_path)
+        size_bytes = await asyncio.to_thread(os.path.getsize, target_path)
+        # FR34：只登记"路径事实"，落库由执行器负责（同 screenshot 通道）
+        ctx.artifacts.append({"kind": "DOWNLOAD", "path": target_path,
+                              "size_bytes": size_bytes})
+        return ctx.set_var(output_var, os.path.basename(target_path))

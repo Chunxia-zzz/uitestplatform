@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>双 iframe 页（顺序 A）</title></head>
+<body>
+  <!-- M3.8（GAP-12）：iframe 按元素进入的 fixture；swapped 变体顺序对调 -->
+  <div data-testid="main-flag">主文档标记</div>
+  <iframe id="ads" src="ads-child.html" title="广告位"></iframe>
+  <iframe id="pay" src="pay-child.html" title="结算面板"></iframe>
+</body>
+</html>

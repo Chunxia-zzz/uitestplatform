@@ -53,11 +53,23 @@ async def init_db(*, seed: bool = True) -> dict[str, int]:
     from app.models import ActionCatalog
 
     async with SessionLocal() as session:
-        action_rows = await session.execute(select(ActionCatalog.action_key))
-        existing = {row[0] for row in action_rows.all()}
-        added = 0
+        action_rows = await session.execute(select(ActionCatalog))
+        existing = {row.action_key: row for row in action_rows.scalars().all()}
+        added = updated = 0
         for spec in ACTION_CATALOG:
-            if spec.key in existing:
+            row = existing.get(spec.key)
+            # M3.8：已存在的 key 同步可变字段 —— 字典由代码驱动（单一事实来源），
+            # params_schema 等扩展（如 set_variable 增 scope）必须落到 DB 镜像，
+            # 否则启动校验（矩阵 ↔ DB 双向）会拿旧 schema。
+            if row is not None:
+                row.name = spec.name
+                row.category = spec.category
+                row.platforms = list(spec.platforms)
+                row.engines = list(spec.engines)
+                row.params_schema = spec.params_schema
+                row.requires_element = spec.requires_element
+                row.sort = sort_of(spec.key)
+                updated += 1
                 continue
             session.add(ActionCatalog(
                 action_key=spec.key,
@@ -74,5 +86,6 @@ async def init_db(*, seed: bool = True) -> dict[str, int]:
         await session.commit()
         counts["actions"] = (await session.execute(
             select(func.count(ActionCatalog.id)))).scalar_one()
-        logger.info("action_catalog seeded: +%s (total %s)", added, counts["actions"])
+        logger.info("action_catalog seeded: +%s (synced %s, total %s)",
+                    added, updated, counts["actions"])
     return counts

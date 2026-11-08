@@ -79,6 +79,13 @@ class ActionContext:
     resolved_chains: dict[int, LocatorChain] = field(default_factory=dict)
     #: 适配器产生的产物（只记路径事实，落库由执行器负责 —— FR34）
     artifacts: list[dict[str, Any]] = field(default_factory=list)
+    #: M3.8（GAP-13）：执行级共享变量（同一次执行内跨用例；additive，默认空即行为不变）。
+    #: 读取顺序恒为"用例级优先、执行级兜底"（dispatch 用 ChainMap 实现）；
+    #: 只有 set_variable(scope=execution) 写入本层，其余 output_var 一律落 case 层。
+    shared_variables: dict[str, Any] = field(default_factory=dict)
+    #: M3.8（GAP-09）：当前用例开始时刻（time.perf_counter 语义），供
+    #: wait_for_response 做"自用例开始以来"的时间过滤；非执行链路调用点为 None。
+    case_started_ts: float | None = None
 
     def emit(self, event: str, **payload: Any) -> None:
         if self.log:
@@ -87,6 +94,12 @@ class ActionContext:
     def set_var(self, name: str | None, value: Any) -> Any:
         if name:
             self.variables[name] = value
+        return value
+
+    def set_shared_var(self, name: str | None, value: Any) -> Any:
+        """写入执行级共享变量（M3.8 GAP-13）。与 set_var 同样：name 为空时只透传值。"""
+        if name:
+            self.shared_variables[name] = value
         return value
 
 
@@ -206,6 +219,18 @@ class EngineAdapter(ABC):
         非动作诊断方法，**不进 action_catalog**（probe_locator / scan_dom 先例）。
         基类 no-op：桩适配器零改动；Playwright 覆写。
         必须在 context close **之前**调用（tracing.stop 先于 close —— D37）。
+        """
+        return None
+
+    async def reset_case_scope(self) -> None:
+        """用例边界清理（M3.8 GAP-09/12，FR-M3.8-4）。
+
+        同一次执行串行复用 adapter（M3.1 语义），上一个用例遗留的会话级状态
+        （网络 mock、iframe 栈）会泄漏到下一个用例 —— 执行器在每个用例**开始**时
+        调用本钩子兜底（前用例异常中断也能清干净）。
+
+        非动作诊断方法，**不进 action_catalog**（finalize_diagnostics 先例）。
+        基类 no-op：桩适配器零改动；持有会话级状态的引擎（Playwright）应覆写。
         """
         return None
 

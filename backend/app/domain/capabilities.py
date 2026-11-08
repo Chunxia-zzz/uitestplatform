@@ -22,6 +22,8 @@ _WEB = {
     "switch_to_page", "page_scroll",
     "screenshot", "get_url", "get_title", "get_cookies", "set_cookies",
     "delete_cookies", "accept_dialog",
+    # M3.8（GAP-09/10）：网络 mock 与下载
+    "mock_route", "unmock_route", "wait_for_response", "download_file",
 }
 
 _APPIUM = {

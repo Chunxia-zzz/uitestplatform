@@ -49,7 +49,7 @@ jerryyang-uitestplatform/
 │  │  ├─ core/                 配置(config) / 数据库(db) / 错误码(errors) / 日志
 │  │  ├─ domain/               ★ 领域常量（零业务依赖）
 │  │  │  ├─ enums.py           端/引擎/状态枚举 + PLATFORM_ENGINES
-│  │  │  ├─ action_keys.py     51 条动作字典（单一事实来源）
+│  │  │  ├─ action_keys.py     55 条动作字典（单一事实来源；M3.8 起）
 │  │  │  ├─ capabilities.py    引擎能力矩阵（P3）
 │  │  │  └─ locator_types.py   三端定位类型字典（语义层，FR18）
 │  │  ├─ engines/              ★ 引擎适配层
@@ -72,7 +72,7 @@ jerryyang-uitestplatform/
 │  │  └─ versions/             0001 baseline + 0002 target 软删（13 张表）
 │  ├─ sql/
 │  │  ├─ schema.sql            13 张表 DDL（MySQL 8，含 M2/M3.3 修正）
-│  │  └─ seed_action_catalog.sql  51 条动作种子（由脚本生成，勿手改）
+│  │  └─ seed_action_catalog.sql  55 条动作种子（由脚本生成，勿手改）
 │  ├─ fixtures/web/            e2e 静态页面：login / locators / multi-hit
 │  ├─ tests/                   273 个单元测试（target/通知/诊断/扫描/装配/编排…，另 MySQL 集成按需跳过）
 │  ├─ requirements.txt · pyproject.toml · .env.example
@@ -179,7 +179,7 @@ NO_PROXY=127.0.0.1,localhost python scripts/demo_android_case.py
 |---|---|
 | 端/引擎显式路由（`project.platform` + `engine_key` 两列） | ✅ |
 | 引擎注册表 + 启动期"动作字典 ↔ 能力矩阵"双向强校验 | ✅ |
-| 动作分发（方法名==action_key，零映射表） | ✅ 51 条字典 / 42 个引擎动作 / 9 个内建 |
+| 动作分发（方法名==action_key，零映射表） | ✅ 55 条字典 / 42 个引擎动作 / 9 个内建（M3.8 +4 网络与下载） |
 | 9 个平台内建动作（断言 / 变量 / db_query / run_python） | ✅ `run_python` 默认禁用（D11） |
 | element_locator 二维定位（platform × engine_key，`*` 通配） | ✅ |
 | 回退链解析 + `used_locator_id` / `fallback_index` 埋点 | ✅ |

@@ -13,7 +13,8 @@ import ast
 import asyncio
 import logging
 import re
-from collections.abc import Awaitable, Callable
+from collections import ChainMap
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,17 +28,19 @@ logger = logging.getLogger(__name__)
 _VAR_RE = re.compile(r"\$\{([a-zA-Z_][\w.]*)\}|\{\{\s*([a-zA-Z_][\w.]*)\s*\}\}")
 
 
-def render(value: Any, variables: dict[str, Any]) -> Any:
+def render(value: Any, variables: Any) -> Any:
     """变量替换：支持 ``${var}`` 与 ``{{ var }}``，路径可用 ``a.b.c``。
 
     变量缺失时**保留原样**，不静默变空串 —— 否则定位符会变成一片空白，极难排查。
+    ``variables`` 按 Mapping 协议访问（M3.8 起可传 ChainMap 实现"用例级优先、
+    执行级兜底"双层视图）。
     """
     if isinstance(value, str):
         def _sub(m: re.Match) -> str:
             key = m.group(1) or m.group(2)
             cur: Any = variables
             for part in key.split("."):
-                if isinstance(cur, dict) and part in cur:
+                if isinstance(cur, Mapping) and part in cur:
                     cur = cur[part]
                 else:
                     return m.group(0)
@@ -127,6 +130,9 @@ async def _builtin_assert_not_exists(adapter, chain, ctx, params):
 
 
 async def _builtin_set_variable(adapter, chain, ctx, params):
+    scope = str(params.get("scope") or "case")
+    if scope == "execution":
+        return ctx.set_shared_var(params.get("name"), params.get("value"))
     return ctx.set_var(params.get("name"), params.get("value"))
 
 
@@ -223,9 +229,14 @@ def get_action(action_key: str) -> ActionDef:
 async def dispatch(action_key: str, adapter: EngineAdapter | None,
                    chain: LocatorChain | None, params: dict[str, Any],
                    ctx: ActionContext) -> Any:
-    """统一入口。返回动作结果（可能带 output_var 语义）。"""
+    """统一入口。返回动作结果（可能带 output_var 语义）。
+
+    M3.8（GAP-13）：参数渲染用 ``ChainMap(用例级, 执行级)`` —— 读取顺序
+    "用例级优先、执行级兜底"成为渲染路径的自然性质；``render`` 本身零改动
+    （只依赖 Mapping 协议）。
+    """
     spec = get_action(action_key)
-    params = render(params or {}, ctx.variables)
+    params = render(params or {}, ChainMap(ctx.variables, ctx.shared_variables))
 
     # 1) 平台内建
     builtin = BUILTIN_SPECS.get(action_key)

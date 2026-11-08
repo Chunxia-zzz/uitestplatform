@@ -207,6 +207,11 @@ const needsElement = computed(() => {
     || (action.action_key === 'screenshot' && stepForm.value.params.target === 'element')
 })
 
+// M3.8（GAP-12）：switch_to_iframe 绑定元素是"可选语义"（绑了按元素进入，
+// 不绑走 index/弹栈）——选择器要显示，但不参与必填校验。
+const showsElement = computed(() =>
+  needsElement.value || selectedAction.value?.action_key === 'switch_to_iframe')
+
 watch(() => stepForm.value.action_key, () => {
   // 换动作时清空参数，避免把上一个动作的字段带到下一个
   stepForm.value.params = {}
@@ -257,7 +262,9 @@ async function saveStep() {
 
   const body: any = {
     action_key: stepForm.value.action_key,
-    element_id: needsElement.value ? stepForm.value.element_id : null,
+    // M3.8：可选绑定动作（switch_to_iframe）用户选了元素就保留；其余动作
+    // 选择器不显示、值恒为 null —— 与后端三态绑定规则对齐。
+    element_id: stepForm.value.element_id ?? null,
     params: stepForm.value.params,
     output_var: stepForm.value.output_var || null,
     timeout_ms: stepForm.value.timeout_ms ?? null,
@@ -460,8 +467,8 @@ function paramSummary(step: TestStep): string {
         </div>
       </div>
 
-      <div class="field" v-if="needsElement">
-        <label>绑定元素 <span style="color: var(--red)">*</span></label>
+      <div class="field" v-if="showsElement">
+        <label>绑定元素 <span v-if="needsElement" style="color: var(--red)">*</span></label>
         <select v-model.number="stepForm.element_id" class="select">
           <option :value="null">选择元素…</option>
           <option v-for="option in elementOptions" :key="option.id" :value="option.id">
@@ -470,6 +477,9 @@ function paramSummary(step: TestStep): string {
         </select>
         <div v-if="selectedAction?.action_key === 'screenshot'" class="muted" style="font-size: 12px">
           screenshot 只有在 target=element 时才需要元素
+        </div>
+        <div v-if="selectedAction?.action_key === 'switch_to_iframe'" class="muted" style="font-size: 12px">
+          绑定 iframe 元素即按元素进入；不绑定可用 index（两者二选一）
         </div>
       </div>
 

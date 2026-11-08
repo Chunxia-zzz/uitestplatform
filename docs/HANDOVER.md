@@ -10,28 +10,29 @@
 
 - **多引擎 UI 自动化平台**：小型测试团队内部使用（非 SaaS、单机单实例）。
 - **主链**：项目 → 用例集 → 用例 → 元素+动作 → 按端路由引擎执行 → 报告。
-- **端**：`WEB`（Playwright，28/28 动作全实现）；`ANDROID`（Appium，**26 个动作可用 + 2 个平台不适用**，M4.1/M4.2 已交付，真机验收通过）；`IOS` 与 `uiautomator2` 仍是桩（M4.3）。
+- **端**：`WEB`（Playwright，**32 个动作全实现**——M3.8 新增网络 mock×3 + 下载）；`ANDROID`（Appium，**26 个动作可用 + 2 个平台不适用**，M4.1/M4.2 已交付，真机验收通过）；`IOS` 与 `uiautomator2` 仍是桩（M4.3）。
 - 技术栈：FastAPI + SQLAlchemy async + Alembic + APScheduler + Playwright（python）+ Appium REST（httpx 直连）+ Vue 3/Vite/TS（无 UI 组件库）。
-- 代码仓库：`F:\jerryyang-uitestplatform`（monorepo：docs/ + backend/ + frontend/ + scripts/）。
+- 代码仓库：`F:\jerryyang-uitestplatform`（monorepo：docs/ + backend/ + frontend/ + scripts/ + specs/）。
 - GitHub：https://github.com/Chunxia-zzz/uitestplatform （main 分支，Apache-2.0 LICENSE）。
+- **开发流程**：SDD（spec-kit）驱动——`.specify/` + `.claude/skills/speckit-*`（13 条命令），constitution 已填项目铁律；新功能走 `/speckit-specify → plan → tasks → implement → converge`。
 
 ## 2. 当前状态快照（截至 2026-11-08）
 
 | 维度 | 状态 |
 |---|---|
-| 里程碑 | **M1 / M2 / M3.1 / M3.2 / M3.3 / M3.4 / M3.5 / M3.6 / M3.7 全部完成**；**M4.1（Android/Appium 平台侧 + 用例固化）与 M4.2（手势/滑动/上下文 + 执行加固）已完成**（11 份施工图） |
-| 规模 | 64 API 操作 · 51 条动作字典 · 13 张表 · 54 个错误码 · 8 个前端页 |
-| 质量基线 | `pytest` **275 passed + 1 skipped**（MySQL 集成按 env 门控）；`ruff` 全绿（门禁）；五份 Web 冒烟 **113 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 27）；**真机验收 24 项**（设置 15 + 计算器 9）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异 |
-| CI | **GitHub Actions 三个 job 全绿**（backend / frontend / e2e），红灯与 `needs` 跳过已实测；backend 步骤：ruff → pytest → import-linter → `audit_status --check`（声明 vs 实现）→ `compileall scripts` → 全新库 alembic；`.github/workflows/ci.yml` + 本地同源 `scripts/ci_local.sh`；**无 CD**（D40 / D44） |
-| Android | **真机 PJA110（Android 16 / `3149dfe3`）已跑通平台用例**：设置 15/15（#140）、计算器 9/9（#141）、星财富回归 5/5（#139，`fallback_index=1`）；`appium` 覆盖 **28/28 声明动作**（26 个可用 + `hover`/`select_option` 平台不适用） |
-| 验收 | 《docs/验收评估报告.md》结论"可进入验收"；**2026-11-02 已自动复跑全部证据并修 2 处**（/scan 文本列表头与折行、m36 V12 空转）→ 只剩用户手工走查 §5.1 手感项 |
-| 验收前审计 | 已做过两轮：2026-10-20 修 1 个竞态；2026-11-02 修扫描表头 + 修正 V12 验收脚本 |
+| 里程碑 | **M1 / M2 / M3.1~M3.7 全部完成**；**M4.1/M4.2 已完成**；**M3.8（Web 执行能力补齐：网络 mock / 下载产物化 / iframe 按元素 / 执行级变量，GAP-09/10/12/13）已完成**（施工图：`specs/001-web-exec-capabilities/`，SDD 六步产物） |
+| 规模 | 64 API 操作 · **55 条动作字典**（M3.8 +4：mock_route/unmock_route/wait_for_response/download_file，新增 NETWORK 类） · 13 张表 · 54 个错误码 · 8 个前端页 |
+| 质量基线 | `pytest` **303 passed + 1 skipped**（MySQL 集成按 env 门控）；`ruff` 全绿（门禁 app+tests）；六份 Web 冒烟 **121 项全绿**（m3 17 · m32 24 · m34 30 · m35 15 · m36 22 · **m38 13**）；`smoke_ui` 11/11；`lint-imports` 2 kept；`alembic check` 无差异；`audit_status --check` ok |
+| CI | **GitHub Actions 三个 job 全绿**（backend / frontend / e2e）；backend 步骤：ruff → pytest → import-linter → `audit_status --check` → `compileall scripts` → 全新库 alembic；**无 CD**（D40 / D44） |
+| Android | 真机 PJA110（Android 16 / `3149dfe3`）已跑通平台用例：设置 15/15、计算器 9/9、星财富回归 5/5；`appium` 覆盖 28/28 声明动作（M3.8 的新 4 动作为 WEB 端专属，Android 矩阵未声明） |
+| 生产库 | **SQLite（2026-11-08 用户决策定案）**；GAP-25 改判不适用；D1 的 MySQL 选型作废 |
+| 验收 | 《docs/验收评估报告.md》结论"可进入验收"；M3.8 增量未入验收报告（后续补充） |
 
 ## 3. 铁律（违反 = 返工）
 
 1. **文档先行、代码后写**：每个批次先出增量设计文档（含语义决策 + 文件级任务列表），用户确认后再动代码。
 2. **事实以代码为准**：确认任何功能状态，必须以真实代码文件或可执行命令输出为依据，禁止凭文档推断。
-3. **冻结契约不可破坏**：动作字典 51 条、CAPABILITY_MATRIX、FR1–FR58；只允许新增；改冻结项必须走变更流程并在文档「变更记录」留痕。
+3. **冻结契约不可破坏**：动作字典 **55 条**（M3.8 起）、CAPABILITY_MATRIX、FR1–FR58；只允许新增；改冻结项必须走变更流程并在文档「变更记录」留痕（M3.8 对 set_variable/switch_to_iframe 的向后兼容扩展已在 specs/001 留痕）。
 4. **改表必须走 Alembic**（`revision --autogenerate` + `upgrade head`），**禁止删库重建**；`alembic check` 是模型↔迁移一致性唯一判据；`schema.sql` 同步更新（MySQL DDL 事实源）。
 5. **统一错误信封**：新错误码 = `core/errors.py` 加类 **且同步文件底部汇总列表**；新 router 必须在 `api/v1/__init__.py` 注册。
 6. **FR34**：artifact 只由执行器落库，适配器只产出文件/路径。
@@ -46,11 +47,11 @@
 | 全量测试 | `cd /f/jerryyang-uitestplatform/backend && ../.venv/Scripts/python.exe -m pytest -q` |
 | 分层红线 | `../.venv/Scripts/lint-imports.exe`（预期 2 kept） |
 | 迁移一致性 | `../.venv/Scripts/alembic.exe check`（开发库已 stamp，改模型先 `revision --autogenerate`） |
-| 后端启动 | `cd backend && ../.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`（后台运行） |
+| 后端启动 | `cd backend && ../.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`（后台运行；**必须先 cd backend**——`--app-dir` 不改 cwd，相对路径 SQLite/artifacts 会静默指向错误目录新建空库） |
 | fixture 静态站 | `.venv/Scripts/python.exe scripts/serve_fixtures.py`（8899，含 login/locators/multi-hit/todo） |
 | 前端 dev | `cd frontend && npm run dev -- --host 127.0.0.1 --port 5173 --strictPort`（**必须带 `--strictPort`**：5173 处于 TIME_WAIT 时 vite 会静默换到 5174，导致走查/冒烟打空） |
 | 杀端口 | PowerShell：`Get-NetTCPConnection -LocalPort 8000 -State Listen` → `Stop-Process -Id $_ -Force` |
-| 冒烟验收 | `scripts/smoke_m3.py`(17) · `smoke_m32.py`(24) · `smoke_m34.py`(30) · `smoke_m35.py`(15) · `smoke_m36.py --phase <full\|off\|bad\|offdiag\|nostub>`(27)——m36 各阶段需按脚本头部注释切 env 重启后端 |
+| 冒烟验收 | `scripts/smoke_m3.py`(17) · `smoke_m32.py`(24) · `smoke_m34.py`(30) · `smoke_m35.py`(15) · `smoke_m36.py --phase <full\|off\|bad\|offdiag\|nostub>`(22，需按脚本头注释切 env 重启后端) · `scripts/smoke_m38.py`(13，M3.8) |
 | 本地 CI 同源检查 | `bash scripts/ci_local.sh`（pytest + lint-imports + 全新库 alembic check + 前端 build；加 `--with-e2e` 需 8000/8899 已起） |
 | 演示用例 | `scripts/demo_web_case.py`（11 步 Todo 全链路） |
 | 能力自检 | `scripts/audit_status.py`（声明 vs 实现 + FR4 签名核对） |
@@ -99,6 +100,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
 | **D41** | **通知渠道单选 `UIP_NOTIFY_CHANNEL=wecom\|feishu`（默认 wecom）；飞书走 interactive 卡片，标题带自定义关键词；不做多渠道并行/管理 UI** | 2026-11-04；M3.7 详细设计；GAP-43 |
 | **D42** | **AppiumAdapter 用 async httpx 直连 Appium REST（`trust_env=False`），不引入同步 Appium-Python-Client；M4.1 只做 Android + 12 个核心动作** | 2026-11-08；M4 详细设计；真机联调实测 |
 | **D43** | **执行必须有限时间结束（M4.2 加固）**：命令硬上限（read timeout + 10%）、瞬时错误限次 3 次、`start_app` 后等前台包名、**执行器单步硬上限 `max(30s, timeout×2+30s)`**；整屏手势从通知栏以下开始 | 2026-11-08；真机遇到「执行永远 RUNNING」，见 M4 §7.8 |
+| **D45** | **M3.8 语义决策（specs/001 research R1–R9）**：mock 模式用引擎原生 glob（不做语义翻译层）；mock/unmock/wait 拆 3 动作（参数正交）；mock key=(pattern,method) 后写覆盖、解除不存在报错；响应收集器 + `case_started_ts` 时间窗（动作串行下"先等后触发"会死锁）；用例边界 `reset_case_scope()` 钩子自动清 mock+iframe 栈；下载走 FR34 通道（kind=DOWNLOAD）；iframe 绑元素与 index 互斥、绑元素规则三态（OPTIONAL_ELEMENT_ACTIONS）；执行级变量 ChainMap(case,execution) 用例级优先、output_var 恒 case 层；**生产库定 SQLite（GAP-25 改判不适用）** | 2026-11-08；specs/001-web-exec-capabilities |
 
 ## 7. 实现踩坑 Top 10（真金白银的教训，勿重蹈）
 
@@ -119,7 +121,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
 
 | # | 事项 | 背景 |
 |---|---|---|
-| 1 | **生产库选型**：SQLite（现状）vs MySQL 8（D1 原定） | 选 MySQL → 部署时切 `UIP_DATABASE_URL` + 跑 GAP-25；选 SQLite → 改判 GAP-25 不适用 + 更新 D1 |
+| 1 | ~~生产库选型~~ | **已定案：SQLite（2026-11-08）**，GAP-25 改判不适用 |
 | 2 | **「执行目标管理」前端页**要不要排期 | 现状：target/trace/video/har 只能 env 或 API 配置，无页面 |
 | 3 | **GAP-47 WebView 内部元素**要不要现在做 | 上下文列表/切换已实现（M4.2）；切进 `WEBVIEW_*` 后的元素操作需要 App 为 debug 包且开 WebView 调试，需业务方提供包与 H5 页面 |
 
@@ -128,18 +130,19 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
 ```
 1. GAP-47：WebView 内部元素（等业务方 debug 包 + H5 页面，见 §8 决策 #3）
 2. M4.3：iOS（macOS/云真机）、uiautomator2 引擎、多设备租约
-3. GAP-09/10/12/13（网络拦截 / 下载 / iframe 按元素 / 执行级变量）
-4. D3 工程约定（目录/命名/错误码/Git 流程/测试规范）
-5. GAP-25 MySQL 集成测试（代码已就绪，skip 门控）                      ← 随决策 #1
+3. D3 工程约定（目录/命名/错误码/Git 流程/测试规范）
+4. ~~GAP-09/10/12/13~~（已完成：M3.8，specs/001）
+5. ~~GAP-25 MySQL 集成测试~~（改判不适用：生产库定 SQLite）
 ```
 
 ## 10. 已知限制（对用户如实交代过的）
 
 - trace/video/HAR 无页面配置；通知支持企微 / 飞书单选（D41），仍无管理 UI；
 - **Android 到 M4.2**：26 个动作可用（`hover`/`select_option` 平台不适用）、单设备串行、WebView 内部元素未验证（GAP-47）、iOS/uiautomator2 未实现（M4.3）；冷启动开屏广告需用例侧处理（GAP-48）；
-- 无下载处理、网络拦截、trace 之外没有 Shadow DOM 穿透、iframe 只能按 index；
+- **Web 到 M3.8**：mock 只影响当前执行会话且不追溯已发出请求；下载多文件只保存第一个；iframe 按元素只处理同文档 iframe；
+- 无 Shadow DOM 穿透（trace 之外）；
 - 单机单进程语义：重启丢排队任务（启动自愈置 ERROR）、WS 仅同进程（前端有 5s 轮询兜底）；
-- `schema.sql` 是 MySQL DDL，SQLite 下 ENUM 无 DB 级强校验。
+- `schema.sql` 是 MySQL DDL，SQLite 下 ENUM 无 DB 级强校验（值校验在应用层）。
 
 ---
 

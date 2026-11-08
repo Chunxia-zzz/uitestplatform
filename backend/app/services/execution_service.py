@@ -35,6 +35,7 @@ from app.engines.registry import registry
 from app.engines.session import SessionManager
 from app.models import Artifact, Execution, ExecutionStepResult, TestCase, TestStep
 from app.services import notify_service
+from app.services.case_service import OPTIONAL_ELEMENT_ACTIONS, element_requirement
 from app.services.element_service import resolve_chain_for
 from app.services.event_bus import ExecutionEvents
 from app.services.project_service import get_or_404 as get_project
@@ -160,6 +161,10 @@ async def execute(execution_id: int) -> None:
 
         manager = SessionManager(registry)
         started = time.perf_counter()
+        # M3.8（GAP-13）：执行级共享变量 —— 同一次执行内跨用例可见，
+        # 执行结束随本作用域销毁（不落库、不跨执行）。写入只经
+        # set_variable(scope=execution)；读取"用例级优先、执行级兜底"。
+        execution_vars: dict = {}
         counts = {"passed": 0, "failed": 0, "errored": 0, "skipped": 0}
         cancelled = False
 
@@ -175,7 +180,8 @@ async def execute(execution_id: int) -> None:
                     break
                 events.emit("case.started", case_id=case.id, title=case.title)
                 case_status = await _run_case(
-                    db, execution, project, adapter, case, events, execution_id)
+                    db, execution, project, adapter, case, events, execution_id,
+                    execution_vars)
                 if case_status == "CANCELLED":
                     cancelled = True
                     counts["skipped"] += 1
@@ -292,12 +298,21 @@ async def _register_diagnostics(db: AsyncSession, execution_id: int,
 
 
 async def _run_case(db: AsyncSession, execution: Execution, project, adapter,
-                    case: TestCase, events: ExecutionEvents, execution_id: int) -> str:
+                    case: TestCase, events: ExecutionEvents, execution_id: int,
+                    execution_vars: dict | None = None) -> str:
     steps = list((await db.execute(
         select(TestStep).where(TestStep.case_id == case.id, TestStep.enabled.is_(True))
         .order_by(TestStep.seq))).scalars().all())
 
     case_vars: dict = {}
+    # M3.8（GAP-09/12）：用例边界清理 —— mock / iframe 栈等会话级状态
+    # 不允许泄漏到下一个用例；放在用例开始而非结束，前用例异常中断也能兜住。
+    try:
+        await adapter.reset_case_scope()
+    except Exception:                              # 清理失败不阻断用例（防御式，R5 风格）
+        logger.warning("execution %s case %s reset_case_scope failed",
+                       execution_id, case.id, exc_info=True)
+    case_started_ts = time.perf_counter()
     aborted = False
     failed = errored = False
 
@@ -320,6 +335,8 @@ async def _run_case(db: AsyncSession, execution: Execution, project, adapter,
                 execution_id=execution.id, case_id=case.id, step_seq=step.seq,
                 timeout_ms=step.timeout_ms or project.default_timeout_ms,
                 variables=case_vars, log=collector,
+                shared_variables=execution_vars if execution_vars is not None else {},
+                case_started_ts=case_started_ts,
             )
             step_started = time.perf_counter()
             # 单步硬上限：动作必须在自己时间预算内结束。
@@ -337,7 +354,15 @@ async def _run_case(db: AsyncSession, execution: Execution, project, adapter,
                     params["output_var"] = step.output_var
                 # screenshot(target=element) 也绑定元素，但它不是"必须绑定"的动作
                 # （页面级截图不需要元素），所以不能只靠 spec.requires_element 判断。
-                needs_element = spec.requires_element or params.get("target") == "element"
+                # M3.8：绑定规则改走 case_service.element_requirement（写入口共用
+                # 一份规则，M3.2 原则），可选绑定动作（switch_to_iframe）绑了就传 chain。
+                needs_element = element_requirement(step.action_key, params)
+                if not needs_element and step.element_id:
+                    if step.action_key in OPTIONAL_ELEMENT_ACTIONS:
+                        needs_element = True
+                    else:
+                        raise ValidationFailed(
+                            f"动作 {step.action_key} 不应绑定元素")
                 chain = None
                 if needs_element:
                     if not step.element_id:

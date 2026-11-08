@@ -78,6 +78,9 @@ class ActionCategory(StrEnum):
     ASSERT = "ASSERT"
     DATA = "DATA"
     SYSTEM = "SYSTEM"
+    #: M3.8（GAP-09）：网络 mock / 响应检索；SQLite 列为 VARCHAR 无 CHECK，
+    #: 值校验在应用层；MySQL DDL（schema.sql）的 ENUM 已同步扩值。
+    NETWORK = "NETWORK"
 
 
 #: 端 → 可用引擎（P1 路由的合法组合；与 registry 双向校验）

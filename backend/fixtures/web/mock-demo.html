@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>Mock 演示页</title></head>
+<body>
+  <h1>接口数据演示</h1>
+  <!-- M3.8（GAP-09）：load 即请求 /api/demo 并渲染；
+       mock 生效显示 mock 内容，解除后点"重新请求"显示 from-real -->
+  <div data-testid="api-out" id="out">未加载</div>
+  <button data-testid="reload" id="reload" onclick="loadApi()">重新请求</button>
+  <script>
+    async function loadApi() {
+      const out = document.getElementById('out')
+      try {
+        const resp = await fetch('/api/demo')
+        const data = await resp.json()
+        out.textContent = 'msg=' + data.msg + ' status=' + resp.status
+      } catch (err) {
+        out.textContent = '请求失败'
+      }
+    }
+    loadApi()
+  </script>
+</body>
+</html>

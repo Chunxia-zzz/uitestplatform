@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS `action_catalog` (
   `id`               BIGINT      NOT NULL AUTO_INCREMENT,
   `action_key`       VARCHAR(64) NOT NULL COMMENT '统一动作标识（英文 snake_case，D6）',
   `name`             VARCHAR(64) NOT NULL COMMENT '中文名（仅展示）',
-  `category`         ENUM('ELEMENT','APP_LIFECYCLE','CONTEXT','NAVIGATION','ASSERT','DATA','SYSTEM') NOT NULL,
+  `category`         ENUM('ELEMENT','APP_LIFECYCLE','CONTEXT','NAVIGATION','ASSERT','DATA','SYSTEM','NETWORK') NOT NULL,
   `platforms`        JSON        NOT NULL,
   `engines`          JSON        NOT NULL COMMENT '[] = 平台内建动作',
   `params_schema`    JSON        NOT NULL,

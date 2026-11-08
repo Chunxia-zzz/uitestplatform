@@ -61,20 +61,43 @@ async def get_step_or_404(db: AsyncSession, case_id: int, step_id: int) -> TestS
 
 
 # ─────────────────────────── 校验 ───────────────────────────
+#: M3.8（GAP-12）：绑定元素是**可选语义**的动作 —— 绑定元素进入该 iframe，
+#: 不绑定走 index / 弹栈。写入口与执行口共用本集合（单一规则来源）。
+OPTIONAL_ELEMENT_ACTIONS: frozenset[str] = frozenset({"switch_to_iframe"})
+
+
 def _special_element_need(action_key: str, params: dict[str, Any]) -> bool:
     """screenshot(target=element) 需要元素，但动作本身声明 requires_element=False。"""
     return action_key == "screenshot" and params.get("target") == "element"
 
 
 def element_requirement(action_key: str, params: dict[str, Any] | None) -> bool:
-    """该动作是否需要绑定元素（含 screenshot(target=element) 特例）。
+    """该动作是否**必须**绑定元素（含 screenshot(target=element) 特例）。
 
     M3.4 的 Scaffold 用它做专用错误码判断；Cases API 的校验仍走 validate_action。
+    M3.8 起 switch_to_iframe 属"可选绑定"，本函数对其返回 False（不必须）。
     """
     spec = ACTION_BY_KEY.get(action_key)
     if spec is None:
         raise ValidationFailed(f"未知动作 {action_key}", {"action_key": action_key})
     return spec.requires_element or _special_element_need(action_key, params or {})
+
+
+def _validate_cross_field(action_key: str, params: dict[str, Any],
+                          has_element: bool) -> None:
+    """JSON Schema 表达不了的跨字段校验（M3.8）。
+
+    * mock_route：json 与 body 二选一（同时给出歧义）。
+    * switch_to_iframe：绑定元素与 index 互斥（不允许歧义形态）。
+    """
+    if action_key == "mock_route":
+        if params.get("json") is not None and params.get("body") is not None:
+            raise ValidationFailed(
+                "mock_route 的 json 与 body 只能二选一", {"action_key": action_key})
+    if action_key == "switch_to_iframe" and has_element \
+            and params.get("index") is not None:
+        raise ValidationFailed(
+            "switch_to_iframe 绑定元素与 index 只能二选一", {"action_key": action_key})
 
 
 def validate_action(action_key: str, has_element: bool,
@@ -84,6 +107,9 @@ def validate_action(action_key: str, has_element: bool,
     M3.4 起被 Scaffold 复用：装配阶段还没有 element_id，但必须能校验
     "这个动作需不需要元素、参数对不对"。所以把判断依据从 `element_id`
     换成 `has_element` —— 同一份规则，两处调用。
+
+    M3.8 起绑定规则三态：必须绑（requires_element）/ 可选绑
+    （OPTIONAL_ELEMENT_ACTIONS）/ 必须不绑（其余）。
     """
     spec = ACTION_BY_KEY.get(action_key)
     if spec is None:
@@ -95,9 +121,11 @@ def validate_action(action_key: str, has_element: bool,
         hint = "（screenshot target=element）" if _special_element_need(action_key, params) else ""
         raise ValidationFailed(f"动作 {action_key} 需要绑定元素{hint}",
                                {"action_key": action_key})
-    if not needs_element and has_element:
+    if not needs_element and has_element and action_key not in OPTIONAL_ELEMENT_ACTIONS:
         raise ValidationFailed(f"动作 {action_key} 不应绑定元素",
                                {"action_key": action_key})
+
+    _validate_cross_field(action_key, params, has_element)
 
     try:
         js_validate(instance=params, schema=spec.params_schema)

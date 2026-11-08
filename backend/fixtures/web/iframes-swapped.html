@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>双 iframe 页（顺序 B：对调）</title></head>
+<body>
+  <!-- 与 iframes.html 同内容但 iframe 顺序对调 —— 验证"按元素进入"顺序无关 -->
+  <div data-testid="main-flag">主文档标记</div>
+  <iframe id="pay" src="pay-child.html" title="结算面板"></iframe>
+  <iframe id="ads" src="ads-child.html" title="广告位"></iframe>
+</body>
+</html>

@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.domain.action_keys import ACTION_CATALOG, sort_of  # noqa: E402
 
 HEADER = """-- ============================================================
---  action_catalog 种子数据（51 条，由 scripts/gen_seed_sql.py 生成）
+--  action_catalog 种子数据（条数由 action_keys.py 决定，由 scripts/gen_seed_sql.py 生成）
 --  单一事实来源：backend/app/domain/action_keys.py
 --  勿手工编辑本文件 —— 改代码后重新生成
 --  用法：mysql -u root -p uitest < seed_action_catalog.sql
@@ -46,7 +46,7 @@ def main() -> int:
             f"{sql_str(schema)}, "
             f"{1 if spec.requires_element else 0}, {sort_of(spec.key)}, 1);\n"
         )
-    lines.append("\n-- 校验：应为 51\n")
+    lines.append("\n-- 校验：条数与 action_keys.py 的 ACTION_CATALOG 一致\n")
     lines.append("-- SELECT COUNT(*) FROM `action_catalog`;\n")
     lines.append("-- SELECT COUNT(*) FROM `action_catalog` WHERE JSON_LENGTH(`engines`) = 0;  -- 9\n")
 

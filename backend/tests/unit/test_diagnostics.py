@@ -54,8 +54,8 @@ def test_video_non_bool_ignored_with_warning():
 
 
 def test_finalize_diagnostics_not_in_action_catalog():
-    """FR58：finalize_diagnostics 是诊断方法，绝不进 51 条动作字典。"""
-    assert len(ACTION_BY_KEY) == 51
+    """FR58：finalize_diagnostics 是诊断方法，绝不进动作字典（M3.8 起 55 条）。"""
+    assert len(ACTION_BY_KEY) == 55
     for mode in TRACE_MODES:                             # 顺带守住合法值集合
         assert mode in {"off", "on-failure", "always"}
     assert "finalize_diagnostics" not in ACTION_BY_KEY

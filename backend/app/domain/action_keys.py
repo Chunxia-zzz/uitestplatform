@@ -1,4 +1,4 @@
-"""统一动作字典 —— 51 条（M1 附录 B 的代码化版本，单一事实来源）。
+"""统一动作字典 —— 55 条（M1 附录 B 的代码化版本，单一事实来源；M3.8 起 55）。
 
 约定（D6）：
 * ``key`` 英文 ``snake_case``、语义自明；中文名只放 ``name`` 展示。
@@ -7,6 +7,11 @@
 
 ★ 冻结约定（M1 FR4）：适配器 **方法名 == key**、**关键字参数名 == props 的键名**，
    因此分发时可以直接 ``getattr(adapter, key)(chain, ctx, **params)``，不写映射表。
+
+变更记录（冻结项扩展，向后兼容）：
+* M3.8（GAP-09/10）：新增 mock_route / unmock_route / wait_for_response（NETWORK）、
+  download_file（ELEMENT）；``set_variable`` 增加可选 ``scope``（执行级变量，GAP-13）；
+  ``switch_to_iframe`` 支持"按元素进入"（步骤绑定 iframe 元素，与 index 互斥，GAP-12）。
 """
 from __future__ import annotations
 
@@ -128,8 +133,9 @@ _ACTIONS: list[ActionDef] = [
     ActionDef("go_forward", "前进", "NAVIGATION", WEB, PW, False),
     ActionDef("refresh", "刷新", "NAVIGATION", WEB, PW, False),
     ActionDef("switch_to_iframe", "进入/退出 iframe", "NAVIGATION", WEB, PW, False,
-              {"index": _i("为空且无 element 时弹栈（D12）")},
-              note="带参进、无参弹栈；单动作栈语义（D12），不新增 switch_to_main_frame"),
+              {"index": _i("按出现顺序进入；与绑定元素互斥；两者都不给时弹栈（D12）")},
+              note="带参进、无参弹栈；单动作栈语义（D12），不新增 switch_to_main_frame；"
+                   "M3.8 起支持按元素进入（步骤绑定 iframe 元素，与 index 互斥，GAP-12）"),
     ActionDef("switch_to_page", "切换标签页", "NAVIGATION", WEB, PW, False,
               {"index": _i(default=-1)}),
     ActionDef("page_scroll", "页面滚动", "NAVIGATION", WEB, PW, False,
@@ -169,7 +175,12 @@ _ACTIONS: list[ActionDef] = [
 
     # ───────────────── DATA（3）─────────────────
     ActionDef("set_variable", "设置变量", "DATA", ALL, (), False,
-              {"name": _s(), "value": {}}, ("name", "value")),
+              {"name": _s(), "value": {},
+               "scope": {"type": "string", "enum": ["case", "execution"],
+                         "description": "case=本用例内（默认，现状不变）；"
+                                        "execution=本次执行内跨用例共享（GAP-13）"}},
+              ("name", "value"),
+              note="output_var 类输出恒为用例级；执行级只能经 scope=execution 显式写入"),
     ActionDef("eval_expression", "变量表达式求值", "DATA", ALL, (), False,
               {"expression": _s(), "output_var": _s()}, ("expression",),
               note="仅支持白名单运算，禁止任意代码执行"),
@@ -195,6 +206,36 @@ _ACTIONS: list[ActionDef] = [
     ActionDef("run_python", "执行 Python 代码", "SYSTEM", ALL, (), False,
               {"code": _s(), "output_var": _s()}, ("code",),
               note="默认禁用（UIP_ALLOW_RUN_PYTHON=false）；开启时受限命名空间 + 强制超时（D11）"),
+
+    # ───────────────── NETWORK（3，M3.8 / GAP-09，仅 WEB）─────────────────
+    ActionDef("mock_route", "声明接口 Mock", "NETWORK", WEB, PW, False,
+              {"pattern": _s("URL 通配模式，如 **/api/demo"),
+               "method": _s("HTTP 方法过滤，如 GET；缺省匹配全部"),
+               "status": _i("mock 响应状态码，默认 200"),
+               "content_type": _s("响应 Content-Type；缺省按 body 形态推断"),
+               "body": _s("响应体文本；与 json 二选一"),
+               "json": {"type": "object", "description": "响应体 JSON 对象；与 body 二选一"},
+               "abort": _b("true=直接中断请求（status/body/json 被忽略）")},
+              ("pattern",),
+              note="同 (pattern, method) 重复声明后写覆盖；用例边界自动清理（FR-M3.8-4）"),
+    ActionDef("unmock_route", "解除接口 Mock", "NETWORK", WEB, PW, False,
+              {"pattern": _s("必须与声明时完全一致"),
+               "method": _s("必须与声明时完全一致（若声明时给了）")},
+              ("pattern",),
+              note="解除不存在的声明报 ValidationFailed；用例中途恢复真实接口用"),
+    ActionDef("wait_for_response", "等待网络响应", "NETWORK", WEB, PW, False,
+              {"pattern": _s("URL 通配模式"),
+               "method": _s("HTTP 方法过滤"),
+               "expect_status": _i("期望状态码；不符视为未命中继续轮询"),
+               "output_var": _s("命中结果存入变量：{url, status, method}")},
+              ("pattern",),
+              note="检索自当前用例开始以来的响应；超时失败并附近邻请求摘要"),
+
+    # ───────────────── ELEMENT 追加（M3.8 / GAP-10，仅 WEB）─────────────────
+    ActionDef("download_file", "下载文件", "ELEMENT", WEB, PW, True,
+              {"output_var": _s("保存后的文件名（含扩展名）存入变量")},
+              note="点击绑定元素并接管浏览器下载；文件保存为本次执行产物（kind=DOWNLOAD）；"
+                   "多文件只保存第一个"),
 ]
 
 #: 动作全集（顺序即展示顺序与 sort 值来源）
@@ -205,8 +246,8 @@ ACTION_KEYS: frozenset[str] = frozenset(ACTION_BY_KEY)
 #: 平台内建动作（不经过适配器）
 BUILTIN_ACTION_KEYS: frozenset[str] = frozenset(a.key for a in ACTION_CATALOG if a.is_builtin)
 
-assert len(ACTION_CATALOG) == 51, f"动作字典应为 51 条，实际 {len(ACTION_CATALOG)}"
-assert len(ACTION_BY_KEY) == 51, "动作 key 有重复"
+assert len(ACTION_CATALOG) == 55, f"动作字典应为 55 条（M3.8 起），实际 {len(ACTION_CATALOG)}"
+assert len(ACTION_BY_KEY) == 55, "动作 key 有重复"
 
 
 def sort_of(key: str) -> int:
