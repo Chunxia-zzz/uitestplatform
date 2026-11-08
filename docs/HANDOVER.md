@@ -113,7 +113,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
 9. **纯字符串判断的函数不要写成 async**（如 `move_guard`），否则漏 await 循环检测静默失效。
 10. **前端字段名必须核对后端响应**（`/actions` 返回 `action_key` 不是 `key`，写错不报错只是静默显示错）。
 
-完整 22 条见 WorkBuddy 工作区记忆；以上是跨会话最贵的 10 条。
+完整 22 条见 `docs/实现踩坑清单.md`（2026-11-08 从 WorkBuddy 工作区记忆迁出）；以上是跨会话最贵的 10 条。
 
 ## 8. 待用户决策（新会话不要擅自定）
 
